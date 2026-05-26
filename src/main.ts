@@ -1,5 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
@@ -28,6 +30,14 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
 
   SwaggerModule.setup('docs', app, document);
+
+  app.useGlobalFilters(
+  new HttpExceptionFilter(),
+);
+
+app.useGlobalInterceptors(
+  new ResponseInterceptor(),
+);
 
   await app.listen(process.env.PORT ?? 3000);
 

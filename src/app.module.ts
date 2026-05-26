@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+//import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import { PrismaModule } from './prisma/prisma.module';
@@ -13,13 +13,22 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { envValidationSchema } from './config/env.validation';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+} from '@nestjs/common';
+
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+  ConfigModule.forRoot({
+  isGlobal: true,
 
+  validationSchema: envValidationSchema,
+}),
     PrismaModule,
 
     AuthModule,
@@ -34,4 +43,10 @@ import { NotificationsModule } from './notifications/notifications.module';
     NotificationsModule,
   ],
 })
-export class AppModule {}
+export class AppModule
+  implements NestModule
+{
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('{*path}');
+  }
+}
