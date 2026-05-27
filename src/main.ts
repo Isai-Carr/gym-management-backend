@@ -1,17 +1,59 @@
 import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestFactory } from '@nestjs/core';
+
+import {
+  SwaggerModule,
+  DocumentBuilder,
+} from '@nestjs/swagger';
+
+import { NestExpressApplication } from '@nestjs/platform-express';
+
+import { join } from 'path';
 
 import { AppModule } from './app.module';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+
+import { AuditService } from './audit/audit.service';
+
+import { ThrottlerGuard } from '@nestjs/throttler';
+
+import { APP_GUARD } from '@nestjs/core';
+
+async function bootstrap() {
+  const app =
+    await NestFactory.create<NestExpressApplication>(
+      AppModule,
+    );
+
+  /*
+    STATIC FILES
+  */
+  app.useStaticAssets(
+    join(__dirname, '..', 'uploads'),
+    {
+      prefix: '/uploads/',
+    },
+  );
+
+  /*
+    GLOBAL PREFIX
+  */
   app.setGlobalPrefix('api');
 
+  /*
+    CORS
+  */
+  app.enableCors();
+
+  /*
+    GLOBAL VALIDATION
+  */
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -20,28 +62,56 @@ async function bootstrap() {
     }),
   );
 
+  /*
+    GLOBAL FILTERS
+  */
+  app.useGlobalFilters(
+    new HttpExceptionFilter(),
+  );
+
+  /*
+    GLOBAL INTERCEPTORS
+  */
+  const auditService =
+    app.get(AuditService);
+
+  app.useGlobalInterceptors(
+    new ResponseInterceptor(),
+    new AuditInterceptor(auditService),
+  );
+
+  /*
+    SWAGGER
+  */
   const config = new DocumentBuilder()
     .setTitle('Gym Management API')
-    .setDescription('Backend API for Gym Management System')
+    .setDescription(
+      'Gym Management Backend API',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document =
+    SwaggerModule.createDocument(
+      app,
+      config,
+    );
 
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup(
+    'docs',
+    app,
+    document,
+  );
 
-  app.useGlobalFilters(
-  new HttpExceptionFilter(),
-);
+  /*
+    SERVER
+  */
+  await app.listen(3000);
 
-app.useGlobalInterceptors(
-  new ResponseInterceptor(),
-);
-
-  await app.listen(process.env.PORT ?? 3000);
-
-  console.log(`🚀 Server running on port ${process.env.PORT}`);
+  console.log(
+    `🚀 Server running on port 3000`,
+  );
 }
 
 bootstrap();

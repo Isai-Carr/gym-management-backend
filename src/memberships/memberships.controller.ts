@@ -9,12 +9,12 @@ import {
 
 import { Role } from '@prisma/client';
 
+import { MembershipsService } from './memberships.service';
+
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
 import { Roles } from '../auth/decorators/roles.decorator';
-
-import { MembershipsService } from './memberships.service';
 
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
@@ -29,7 +29,8 @@ export class MembershipsController {
   @Post('plans')
   @Roles(Role.ADMIN)
   createPlan(
-    @Body() dto: CreateMembershipPlanDto,
+    @Body()
+    dto: CreateMembershipPlanDto,
   ) {
     return this.membershipsService.createPlan(dto);
   }
@@ -42,18 +43,24 @@ export class MembershipsController {
   @Post()
   @Roles(Role.ADMIN)
   createMembership(
-    @Body() dto: CreateMembershipDto,
+    @Body()
+    dto: CreateMembershipDto,
   ) {
     return this.membershipsService.createMembership(dto);
   }
 
   @Get()
+  @Roles(Role.ADMIN)
   getMemberships() {
     return this.membershipsService.getMemberships();
   }
 
   @Get(':id')
-  getMembership(@Param('id') id: string) {
+  @Roles(Role.ADMIN)
+  getMembership(
+    @Param('id')
+    id: string,
+  ) {
     return this.membershipsService.getMembership(id);
   }
 }

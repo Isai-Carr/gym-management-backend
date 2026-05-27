@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
-
+import { GetClientsDto } from './dto/get-clients.dto';
 import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -12,62 +12,65 @@ import { UpdateClientDto } from './dto/update-client.dto';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: QueryClientDto) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 10;
+  async findAll(query: GetClientsDto) {
+  const {
+  page = 1,
+  limit = 10,
+  search,
+  sortBy = 'createdAt',
+  order = 'desc',
+} = query;
 
-    const skip = (page - 1) * limit;
+  const skip =
+    (page - 1) * limit;
 
-    const where = query.search
-      ? {
-          OR: [
-            {
-              firstName: {
-                contains: query.search,
-                mode: 'insensitive' as const,
-              },
+  const where = search
+    ? {
+        OR: [
+          {
+            firstName: {
+              contains: search,
+              mode: 'insensitive' as const,
             },
-            {
-              lastName: {
-                contains: query.search,
-                mode: 'insensitive' as const,
-              },
+          },
+          {
+            lastName: {
+              contains: search,
+              mode: 'insensitive' as const,
             },
-          ],
-        }
-      : {};
+          },
+        ],
+      }
+    : {};
 
-    const [clients, total] = await Promise.all([
-      this.prisma.client.findMany({
-        where,
-        skip,
-        take: limit,
+  const clients =
+    await this.prisma.client.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: {
+  [sortBy]: order,
+},
+    });
 
-        include: {
-          user: true,
-        },
+  const total =
+    await this.prisma.client.count({
+      where,
+    });
 
-        orderBy: {
-          createdAt: 'desc',
-        },
-      }),
+  return {
+    data: clients,
 
-      this.prisma.client.count({
-        where,
-      }),
-    ]);
-
-    return {
-      data: clients,
-
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(
+        total / limit,
+      ),
+    },
+  };
+}
 
   async findOne(id: string) {
     const client = await this.prisma.client.findUnique({

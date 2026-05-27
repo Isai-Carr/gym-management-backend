@@ -1,11 +1,11 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   Param,
   Patch,
   Query,
-  Body,
   UseGuards,
 } from '@nestjs/common';
 
@@ -18,41 +18,55 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 
-import { QueryClientDto } from './dto/query-client.dto';
+import { GetClientsDto } from './dto/get-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @Controller('clients')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ClientsController {
   constructor(
     private readonly clientsService: ClientsService,
   ) {}
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  findAll(@Query() query: QueryClientDto) {
+  findAll(
+    @Query()
+    query: GetClientsDto,
+  ) {
     return this.clientsService.findAll(query);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  findOne(@Param('id') id: string) {
+  @Roles(Role.ADMIN)
+  findOne(
+    @Param('id')
+    id: string,
+  ) {
     return this.clientsService.findOne(id);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @Roles(Role.ADMIN)
   update(
-    @Param('id') id: string,
-    @Body() dto: UpdateClientDto,
+    @Param('id')
+    id: string,
+
+    @Body()
+    dto: UpdateClientDto,
   ) {
-    return this.clientsService.update(id, dto);
+    return this.clientsService.update(
+      id,
+      dto,
+    );
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  remove(@Param('id') id: string) {
+  remove(
+    @Param('id')
+    id: string,
+  ) {
     return this.clientsService.remove(id);
   }
 }

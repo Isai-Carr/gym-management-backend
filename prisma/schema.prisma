@@ -23,6 +23,7 @@ model User {
   id       String  @id @default(uuid())
   email    String  @unique
   password String
+  avatar String?
   role     Role    @default(CLIENT)
   isActive Boolean @default(true)
 
@@ -39,8 +40,10 @@ model Client {
   lastName  String
   phone     String?
 
+  avatarUrl String?
+
   userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
 
   memberships Membership[]
 
@@ -49,7 +52,6 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
 model MembershipPlan {
   id String @id @default(uuid())
 
@@ -115,6 +117,35 @@ model Attendance {
   client   Client @relation(fields: [clientId], references: [id])
 
   checkIn DateTime @default(now())
+
+  createdAt DateTime @default(now())
+}
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String?
+
+  action String
+
+  method String
+
+  endpoint String
+
+  ipAddress String?
+
+  payload Json?
+
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id String @id @default(uuid())
+
+  email String
+
+  token String @unique
+
+  expiresAt DateTime
 
   createdAt DateTime @default(now())
 }
