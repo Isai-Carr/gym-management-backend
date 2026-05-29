@@ -21,15 +21,23 @@ enum PaymentStatus {
 
 model User {
   id       String  @id @default(uuid())
+
   email    String  @unique
+
   password String
-  avatar String?
+
   role     Role    @default(CLIENT)
+
   isActive Boolean @default(true)
+
+  avatar String?
 
   client Client?
 
+  refreshTokens RefreshToken[]
+
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 }
 
@@ -144,6 +152,19 @@ model PasswordResetToken {
   email String
 
   token String @unique
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+}
+model RefreshToken {
+  id String @id @default(uuid())
+
+  token String @unique
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id])
 
   expiresAt DateTime
 

@@ -12,6 +12,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -33,7 +34,9 @@ export class AuthController {
       ttl: 60000,
     },
   })
-  login(@Body() dto: LoginDto) {
+  login(
+    @Body() dto: LoginDto,
+  ) {
     return this.authService.login(dto);
   }
 
@@ -51,14 +54,32 @@ export class AuthController {
     @Body()
     body: {
       token: string;
-
       password: string;
     },
   ) {
     return this.authService.resetPassword(
       body.token,
-
       body.password,
+    );
+  }
+
+  @Post('refresh')
+  refresh(
+    @Body()
+    dto: RefreshTokenDto,
+  ) {
+    return this.authService.refreshToken(
+      dto,
+    );
+  }
+
+  @Post('logout')
+  logout(
+    @Body()
+    dto: RefreshTokenDto,
+  ) {
+    return this.authService.logout(
+      dto,
     );
   }
 }

@@ -8,25 +8,19 @@ import { JwtService } from '@nestjs/jwt';
 
 import * as bcrypt from 'bcrypt';
 
-import { randomBytes } from 'crypto';
-
 import { PrismaService } from '../prisma/prisma.service';
-
-import { EmailService } from '../email/email.service';
 
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
-
     private jwtService: JwtService,
-
-    private emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -44,21 +38,21 @@ export class AuthService {
     }
 
     const hashedPassword =
-      await bcrypt.hash(dto.password, 10);
+      await bcrypt.hash(
+        dto.password,
+        10,
+      );
 
     const user =
       await this.prisma.user.create({
         data: {
           email: dto.email,
-
           password: hashedPassword,
 
           client: {
             create: {
               firstName: dto.firstName,
-
               lastName: dto.lastName,
-
               phone: dto.phone,
             },
           },
@@ -69,10 +63,11 @@ export class AuthService {
         },
       });
 
-    const token = await this.generateToken(
-      user.id,
-      user.email,
-    );
+    const token =
+      await this.generateToken(
+        user.id,
+        user.email,
+      );
 
     return {
       message:
@@ -114,10 +109,11 @@ export class AuthService {
       );
     }
 
-    const token = await this.generateToken(
-      user.id,
-      user.email,
-    );
+    const token =
+      await this.generateToken(
+        user.id,
+        user.email,
+      );
 
     return {
       message: 'Login successful',
@@ -126,6 +122,16 @@ export class AuthService {
 
       user,
     };
+  }
+
+  async generateToken(
+    userId: string,
+    email: string,
+  ) {
+    return this.jwtService.sign({
+      sub: userId,
+      email,
+    });
   }
 
   async forgotPassword(
@@ -144,9 +150,11 @@ export class AuthService {
       );
     }
 
-    const token = randomBytes(32).toString(
-      'hex',
-    );
+    const token =
+      Math.random()
+        .toString(36)
+        .substring(2) +
+      Date.now().toString(36);
 
     const expiresAt = new Date();
 
@@ -158,41 +166,22 @@ export class AuthService {
       {
         data: {
           email: dto.email,
-
           token,
-
           expiresAt,
         },
       },
     );
 
-    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
-
-    await this.emailService.sendMail(
-      dto.email,
-
-      'Reset your password',
-
-      `
-      <h2>Password Reset</h2>
-
-      <p>Click below to reset your password:</p>
-
-      <a href="${resetLink}">
-        Reset Password
-      </a>
-      `,
-    );
-
     return {
       message:
-        'Password reset email sent',
+        'Password reset token generated',
+
+      token,
     };
   }
 
   async resetPassword(
     token: string,
-
     password: string,
   ) {
     const resetToken =
@@ -211,7 +200,8 @@ export class AuthService {
     }
 
     if (
-      resetToken.expiresAt < new Date()
+      new Date() >
+      resetToken.expiresAt
     ) {
       throw new BadRequestException(
         'Token expired',
@@ -219,7 +209,10 @@ export class AuthService {
     }
 
     const hashedPassword =
-      await bcrypt.hash(password, 10);
+      await bcrypt.hash(
+        password,
+        10,
+      );
 
     await this.prisma.user.update({
       where: {
@@ -245,15 +238,37 @@ export class AuthService {
     };
   }
 
-  async generateToken(
-    userId: string,
-
-    email: string,
+  async refreshToken(
+    dto: RefreshTokenDto,
   ) {
-    return this.jwtService.sign({
-      sub: userId,
+    try {
+      const payload =
+        await this.jwtService.verifyAsync(
+          dto.refreshToken,
+        );
 
-      email,
-    });
+      const accessToken =
+        await this.generateToken(
+          payload.sub,
+          payload.email,
+        );
+
+      return {
+        accessToken,
+      };
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid refresh token',
+      );
+    }
+  }
+
+  async logout(
+    dto: RefreshTokenDto,
+  ) {
+    return {
+      message:
+        'Logout successful',
+    };
   }
 }
