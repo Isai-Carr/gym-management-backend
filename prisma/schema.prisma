@@ -20,13 +20,13 @@ enum PaymentStatus {
 }
 
 model User {
-  id       String  @id @default(uuid())
+  id String @id @default(uuid())
 
-  email    String  @unique
+  email String @unique
 
   password String
 
-  role     Role    @default(CLIENT)
+  role Role @default(CLIENT)
 
   isActive Boolean @default(true)
 
@@ -37,7 +37,6 @@ model User {
   refreshTokens RefreshToken[]
 
   createdAt DateTime @default(now())
-
   updatedAt DateTime @updatedAt
 }
 
@@ -51,15 +50,18 @@ model Client {
   avatarUrl String?
 
   userId String @unique
-  user   User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   memberships Membership[]
 
   attendances Attendance[]
 
+  reservations Reservation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model MembershipPlan {
   id String @id @default(uuid())
 
@@ -128,6 +130,7 @@ model Attendance {
 
   createdAt DateTime @default(now())
 }
+
 model AuditLog {
   id String @id @default(uuid())
 
@@ -157,6 +160,7 @@ model PasswordResetToken {
 
   createdAt DateTime @default(now())
 }
+
 model RefreshToken {
   id String @id @default(uuid())
 
@@ -170,15 +174,52 @@ model RefreshToken {
 
   createdAt DateTime @default(now())
 }
+
 model Notification {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId    String
+  userId String
 
-  title     String
-  message   String
+  title String
 
-  isRead    Boolean  @default(false)
+  message String
+
+  isRead Boolean @default(false)
 
   createdAt DateTime @default(now())
+}
+
+model Class {
+  id String @id @default(uuid())
+
+  name String
+
+  description String?
+
+  capacity Int
+
+  startTime DateTime
+
+  endTime DateTime
+
+  isActive Boolean @default(true)
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Reservation {
+  id String @id @default(uuid())
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, classId])
 }
