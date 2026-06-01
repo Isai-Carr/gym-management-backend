@@ -35,4 +35,16 @@ export class ReportsController {
   getAttendanceReport() {
     return this.reportsService.getAttendanceReport();
   }
+
+  @Get('expiring-memberships')
+@Roles(Role.ADMIN)
+getExpiringMemberships() {
+  return this.reportsService.getExpiringMemberships();
+}
+
+@Get('inactive-clients')
+@Roles(Role.ADMIN)
+getInactiveClients() {
+  return this.reportsService.getInactiveClients();
+}
 }

@@ -9,65 +9,47 @@ export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
   async getDashboardMetrics() {
-    const totalClients =
-      await this.prisma.client.count();
+  const totalClients =
+    await this.prisma.client.count();
 
-    const activeMemberships =
-      await this.prisma.membership.count({
-        where: {
-          isActive: true,
+  const activeMemberships =
+    await this.prisma.membership.count({
+      where: {
+        isActive: true,
+      },
+    });
 
-          endDate: {
-            gt: new Date(),
-          },
+  const expiredMemberships =
+    await this.prisma.membership.count({
+      where: {
+        endDate: {
+          lt: new Date(),
         },
-      });
+      },
+    });
 
-    const completedPayments =
-      await this.prisma.payment.count({
-        where: {
-          status: PaymentStatus.COMPLETED,
-        },
-      });
+  const completedPayments =
+    await this.prisma.payment.aggregate({
+      _sum: {
+        amount: true,
+      },
 
-    const totalRevenue =
-      await this.prisma.payment.aggregate({
-        _sum: {
-          amount: true,
-        },
+      where: {
+        status: 'COMPLETED',
+      },
+    });
 
-        where: {
-          status: PaymentStatus.COMPLETED,
-        },
-      });
+  return {
+    totalClients,
 
-    const today = new Date();
+    activeMemberships,
 
-    today.setHours(0, 0, 0, 0);
+    expiredMemberships,
 
-    const todayAttendance =
-      await this.prisma.attendance.count({
-        where: {
-          checkIn: {
-            gte: today,
-          },
-        },
-      });
-
-    return {
-      totalClients,
-
-      activeMemberships,
-
-      completedPayments,
-
-      totalRevenue:
-        totalRevenue._sum.amount || 0,
-
-      todayAttendance,
-    };
-  }
-
+    revenue:
+      completedPayments._sum.amount || 0,
+  };
+}
   async getRevenueReport() {
     const payments =
       await this.prisma.payment.findMany({
@@ -103,4 +85,74 @@ export class ReportsService {
       },
     });
   }
+
+  async getExpiringMemberships() {
+  const today = new Date();
+
+  const nextWeek = new Date();
+
+  nextWeek.setDate(
+    today.getDate() + 7,
+  );
+
+  return this.prisma.membership.findMany({
+    where: {
+      endDate: {
+        gte: today,
+        lte: nextWeek,
+      },
+
+      isActive: true,
+    },
+
+    include: {
+      client: true,
+
+      plan: true,
+    },
+
+    orderBy: {
+      endDate: 'asc',
+    },
+  });
+}
+
+async getInactiveClients() {
+  const limitDate = new Date();
+
+  limitDate.setDate(
+    limitDate.getDate() - 30,
+  );
+
+  const recentAttendances =
+    await this.prisma.attendance.findMany({
+      where: {
+        checkIn: {
+          gte: limitDate,
+        },
+      },
+
+      select: {
+        clientId: true,
+      },
+    });
+
+  const activeClientIds =
+    recentAttendances.map(
+      (attendance) =>
+        attendance.clientId,
+    );
+
+  return this.prisma.client.findMany({
+    where: {
+      id: {
+        notIn: activeClientIds,
+      },
+    },
+
+    include: {
+      memberships: true,
+    },
+  });
+}
 }

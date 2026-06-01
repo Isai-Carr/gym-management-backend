@@ -28,18 +28,18 @@ export class AuditInterceptor
     return next.handle().pipe(
       tap(async () => {
         await this.auditService.createLog({
-          userId: request.user?.id,
+  userId: request.user?.id,
 
-          action: `${request.method}_${request.route.path}`,
+  action: `${request.method}_${request.route.path}`,
 
-          method: request.method,
+  method: request.method,
 
-          endpoint: request.originalUrl,
+  endpoint: request.originalUrl,
 
-          ipAddress: request.ip,
+  ipAddress: request.ip,
 
-          payload: request.body,
-        });
+  payload: request.body,
+});
       }),
     );
   }

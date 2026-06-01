@@ -170,3 +170,15 @@ model RefreshToken {
 
   createdAt DateTime @default(now())
 }
+model Notification {
+  id        String   @id @default(uuid())
+
+  userId    String
+
+  title     String
+  message   String
+
+  isRead    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+}
