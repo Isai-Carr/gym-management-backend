@@ -40,8 +40,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
 
-    if (!user) {
-      throw new UnauthorizedException();
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Account disabled or not found');
     }
 
     return user;

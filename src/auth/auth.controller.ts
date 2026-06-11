@@ -1,85 +1,87 @@
 import {
-  Body,
-  Controller,
-  Post,
+  Body, Controller, Get, Post, Request, UseGuards,
 } from '@nestjs/common';
-
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-
 import { AuthService } from './auth.service';
-
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
+import { GetUser } from './decorators/get-user.decorator';
+import { Role } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(
-    @Body() dto: RegisterDto,
-  ) {
+  @ApiOperation({ summary: 'Register a new client (public)' })
+  register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
+  @Post('register-admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Register a new admin (Admin only)' })
+  registerAdmin(@Body() dto: RegisterDto) {
+    return this.authService.registerAdmin(dto);
+  }
+
   @Post('login')
-  @Throttle({
-    default: {
-      limit: 5,
-      ttl: 60000,
-    },
-  })
-  login(
-    @Body() dto: LoginDto,
-  ) {
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Login with email and password' })
+  login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Post('forgot-password')
-  forgotPassword(
-    @Body() dto: ForgotPasswordDto,
-  ) {
-    return this.authService.forgotPassword(
-      dto,
-    );
+  @ApiOperation({ summary: 'Request password reset link via email' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
-  resetPassword(
-    @Body()
-    body: {
-      token: string;
-      password: string;
-    },
-  ) {
-    return this.authService.resetPassword(
-      body.token,
-      body.password,
-    );
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 
   @Post('refresh')
-  refresh(
-    @Body()
-    dto: RefreshTokenDto,
-  ) {
-    return this.authService.refreshToken(
-      dto,
-    );
+  @ApiOperation({ summary: 'Refresh access token' })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshToken(dto);
   }
 
   @Post('logout')
-  logout(
-    @Body()
-    dto: RefreshTokenDto,
-  ) {
-    return this.authService.logout(
-      dto,
-    );
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout (invalidate refresh token)' })
+  logout(@Request() req: any, @Body() dto: RefreshTokenDto) {
+    return this.authService.logout(req.user.id, dto.refreshToken);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password (requires current password)' })
+  changePassword(@GetUser('id') userId: string, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(userId, dto);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user profile' })
+  getProfile(@GetUser('id') userId: string) {
+    return this.authService.getProfile(userId);
   }
 }

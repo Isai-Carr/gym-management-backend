@@ -1,117 +1,91 @@
 import { ValidationPipe } from '@nestjs/common';
-
 import { NestFactory } from '@nestjs/core';
-
-import {
-  SwaggerModule,
-  DocumentBuilder,
-} from '@nestjs/swagger';
-
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
-
 import { join } from 'path';
-
 import { AppModule } from './app.module';
-
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
-
 import { AuditService } from './audit/audit.service';
 
-import { ThrottlerGuard } from '@nestjs/throttler';
-
-import { APP_GUARD } from '@nestjs/core';
-
 async function bootstrap() {
-  const app =
-    await NestFactory.create<NestExpressApplication>(
-      AppModule,
-    );
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  /*
-    STATIC FILES
-  */
-  app.useStaticAssets(
-    join(__dirname, '..', 'uploads'),
-    {
-      prefix: '/uploads/',
-    },
-  );
+  // ── Static file serving ──────────────────────────────────────────────────
+  app.useStaticAssets(join(process.cwd(), 'storage'), { prefix: '/storage/' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 
-  /*
-    GLOBAL PREFIX
-  */
-  app.setGlobalPrefix('api');
+  // ── Global prefix & versioning ──────────────────────────────────────────
+  app.setGlobalPrefix('api/v1');
 
-  /*
-    CORS
-  */
-  app.enableCors();
+  // ── CORS ─────────────────────────────────────────────────────────────────
+  app.enableCors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
 
-  /*
-    GLOBAL VALIDATION
-  */
+  // ── Global validation pipe ───────────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: { enableImplicitConversion: true },
     }),
   );
 
-  /*
-    GLOBAL FILTERS
-  */
-  app.useGlobalFilters(
-    new HttpExceptionFilter(),
-  );
+  // ── Global exception filter ──────────────────────────────────────────────
+  app.useGlobalFilters(new HttpExceptionFilter());
 
-  /*
-    GLOBAL INTERCEPTORS
-  */
-  const auditService =
-    app.get(AuditService);
-
+  // ── Global interceptors ──────────────────────────────────────────────────
+  const auditService = app.get(AuditService);
   app.useGlobalInterceptors(
     new ResponseInterceptor(),
     new AuditInterceptor(auditService),
   );
 
-  /*
-    SWAGGER
-  */
+  // ── Swagger ──────────────────────────────────────────────────────────────
   const config = new DocumentBuilder()
-    .setTitle('Gym Management API')
+    .setTitle('Oasis Training Center — API')
     .setDescription(
-      'Gym Management Backend API',
+      'REST API for Oasis Training Center gym management system.\n\n' +
+      'Base URL: `/api/v1`\n\n' +
+      'Use **Authorize** to provide your JWT Bearer token.',
     )
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', in: 'header' },
+      'JWT',
+    )
+    .addTag('Auth', 'Authentication and user account management')
+    .addTag('Clients', 'Client management (Admin)')
+    .addTag('Activities', 'Gym activities management')
+    .addTag('Memberships', 'Membership plans and subscriptions')
+    .addTag('Payments', 'Payment processing and approval')
+    .addTag('Attendance', 'Check-in and attendance tracking')
+    .addTag('Classes', 'Class scheduling and management')
+    .addTag('Reservations', 'Class reservation system')
+    .addTag('Personal Records', 'Client personal records (PRs)')
+    .addTag('Inventory', 'Gym equipment and inventory')
+    .addTag('Reports', 'Administrative reports and analytics')
+    .addTag('Notifications', 'System notifications and emails')
     .build();
 
-  const document =
-    SwaggerModule.createDocument(
-      app,
-      config,
-    );
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: { persistAuthorization: true },
+  });
 
-  SwaggerModule.setup(
-    'docs',
-    app,
-    document,
-  );
+  // ── Server ───────────────────────────────────────────────────────────────
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
 
-  /*
-    SERVER
-  */
-  await app.listen(3000);
-
-  console.log(
-    `🚀 Server running on port 3000`,
-  );
+  console.log(`🚀 Oasis Training Center API running on port ${port}`);
+  console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);
+  console.log(`💚 Health check: http://localhost:${port}/api/v1/health`);
 }
 
 bootstrap();

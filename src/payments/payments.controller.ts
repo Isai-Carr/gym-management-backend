@@ -1,65 +1,131 @@
 import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UseGuards,
+  Body, Controller, Delete, Get, Param, Patch, Post,
+  Query, Request, UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
-
-import { Role } from '@prisma/client';
-
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiQuery } from '@nestjs/swagger';
+import { Role, PaymentStatus } from '@prisma/client';
 import { PaymentsService } from './payments.service';
-
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-
 import { Roles } from '../auth/decorators/roles.decorator';
-
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
+import { TransferPaymentDto } from './dto/transfer-payment.dto';
 
+const voucherStorage = diskStorage({
+  destination: join(process.cwd(), 'storage', 'payments'),
+  filename: (_req, file, cb) => {
+    cb(null, `${uuidv4()}${extname(file.originalname)}`);
+  },
+});
+
+@ApiTags('Payments')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('payments')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
 export class PaymentsController {
-  constructor(
-    private readonly paymentsService: PaymentsService,
-  ) {}
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
-  createPayment(
-    @Body()
-    dto: CreatePaymentDto,
-  ) {
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Register a payment manually (Admin)' })
+  createPayment(@Body() dto: CreatePaymentDto) {
     return this.paymentsService.createPayment(dto);
   }
 
+  @Post('transfer')
+  @UseInterceptors(FileInterceptor('voucher', {
+    storage: voucherStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = /jpg|jpeg|png|pdf/;
+      if (!allowed.test(extname(file.originalname).toLowerCase())) {
+        return cb(new Error('Only JPG, PNG and PDF files are allowed'), false);
+      }
+      cb(null, true);
+    },
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Submit a transfer payment with voucher (Client)' })
+  createTransfer(
+    @Body() dto: TransferPaymentDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const voucherPath = file ? `/storage/payments/${file.filename}` : undefined;
+    return this.paymentsService.createTransferPayment(dto, voucherPath);
+  }
+
+  @Post('cash')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Register cash payment (Admin)' })
+  createCash(@Body() dto: CreatePaymentDto) {
+    return this.paymentsService.createCashPayment(dto);
+  }
+
+  @Post('terminal')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Register terminal payment (Admin)' })
+  createTerminal(@Body() dto: CreatePaymentDto) {
+    return this.paymentsService.createTerminalPayment(dto);
+  }
+
+  @Patch('approve/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Approve a transfer payment (Admin)' })
+  approve(@Param('id') id: string, @Request() req: any) {
+    return this.paymentsService.approvePayment(id, req.user.id);
+  }
+
+  @Patch('reject/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Reject a transfer payment (Admin)' })
+  reject(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('reason') reason?: string,
+  ) {
+    return this.paymentsService.rejectPayment(id, req.user.id, reason);
+  }
+
   @Get()
-  getPayments() {
-    return this.paymentsService.getPayments();
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get all payments (Admin)' })
+  @ApiQuery({ name: 'status', enum: PaymentStatus, required: false })
+  getPayments(@Query('status') status?: PaymentStatus) {
+    return this.paymentsService.getPayments(status);
+  }
+
+  @Get('pending')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get pending payments (Admin)' })
+  getPending() {
+    return this.paymentsService.getPendingPayments();
   }
 
   @Get(':id')
-  getPayment(
-    @Param('id')
-    id: string,
-  ) {
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get payment by ID (Admin)' })
+  getPayment(@Param('id') id: string) {
     return this.paymentsService.getPayment(id);
   }
 
   @Patch(':id/status')
-  updatePaymentStatus(
-    @Param('id')
-    id: string,
-
-    @Body()
-    dto: UpdatePaymentStatusDto,
-  ) {
-    return this.paymentsService.updatePaymentStatus(
-      id,
-      dto,
-    );
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update payment status (Admin)' })
+  updateStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto) {
+    return this.paymentsService.updatePaymentStatus(id, dto);
   }
 }

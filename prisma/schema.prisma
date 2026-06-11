@@ -7,6 +7,235 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                 String         @id @default(uuid())
+  email              String         @unique
+  password           String
+  role               Role           @default(CLIENT)
+  isActive           Boolean        @default(true)
+  mustChangePassword Boolean        @default(true)
+  avatar             String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+  client             Client?
+  refreshTokens      RefreshToken[]
+
+  @@index([email])
+  @@index([isActive])
+  @@index([role])
+}
+
+model Client {
+  id             String           @id @default(uuid())
+  firstName      String
+  lastName       String
+  phone          String?
+  userId         String           @unique
+  avatarUrl      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+  attendances    Attendance[]
+  user           User             @relation(fields: [userId], references: [id])
+  payments       Payment[]
+  personalRecords PersonalRecord[]
+  memberships    Membership[]
+  reservations   Reservation[]
+
+  @@index([firstName, lastName])
+  @@index([userId])
+}
+
+model MembershipPlan {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  price       Float
+  duration    Int
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+}
+
+model Membership {
+  id         String           @id @default(uuid())
+  clientId   String
+  planId     String
+  activityId String?
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean          @default(true)
+  status     MembershipStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  activity   Activity?        @relation(fields: [activityId], references: [id])
+  client     Client           @relation(fields: [clientId], references: [id])
+  plan       MembershipPlan   @relation(fields: [planId], references: [id])
+  payments   Payment[]
+
+  @@index([clientId])
+  @@index([endDate])
+  @@index([status])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  membershipId  String
+  clientId      String?
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  paymentMethod PaymentMethod
+  transactionId String?
+  voucherUrl    String?
+  notes         String?
+  paidAt        DateTime?
+  approvedBy    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  client        Client?       @relation(fields: [clientId], references: [id])
+  membership    Membership    @relation(fields: [membershipId], references: [id])
+
+  @@index([clientId])
+  @@index([membershipId])
+  @@index([status])
+}
+
+model Attendance {
+  id         String    @id @default(uuid())
+  clientId   String
+  activityId String?
+  checkIn    DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  activity   Activity? @relation(fields: [activityId], references: [id])
+  client     Client    @relation(fields: [clientId], references: [id])
+
+  @@index([checkIn])
+  @@index([clientId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  method    String
+  endpoint  String
+  ipAddress String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isRead])
+  @@index([userId])
+}
+
+model Class {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  capacity     Int
+  startTime    DateTime
+  endTime      DateTime
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+}
+
+model Reservation {
+  id        String   @id @default(uuid())
+  clientId  String
+  classId   String
+  createdAt DateTime @default(now())
+  class     Class    @relation(fields: [classId], references: [id])
+  client    Client   @relation(fields: [clientId], references: [id])
+
+  @@unique([clientId, classId])
+}
+
+model Inventory {
+  id                  String          @id @default(uuid())
+  name                String
+  category            String?
+  description         String?
+  type                InventoryType
+  quantity            Int
+  minStock            Int             @default(0)
+  price               Float?
+  imageUrl            String?
+  status              InventoryStatus @default(AVAILABLE)
+  purchaseDate        DateTime?
+  maintenanceRequired Boolean         @default(false)
+  notes               String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([status])
+  @@index([type])
+}
+
+model Activity {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  attendances Attendance[]
+  memberships Membership[]
+}
+
+model PersonalRecord {
+  id         String     @id @default(uuid())
+  clientId   String
+  exercise   String
+  weight     Float
+  unit       WeightUnit @default(KG)
+  recordedAt DateTime   @default(now())
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  client     Client     @relation(fields: [clientId], references: [id])
+
+  @@index([clientId])
+  @@index([exercise])
+}
+
 enum Role {
   ADMIN
   CLIENT
@@ -14,212 +243,37 @@ enum Role {
 
 enum PaymentStatus {
   PENDING
-  COMPLETED
-  FAILED
+  APPROVED
+  REJECTED
   REFUNDED
 }
 
-model User {
-  id String @id @default(uuid())
-
-  email String @unique
-
-  password String
-
-  role Role @default(CLIENT)
-
-  isActive Boolean @default(true)
-
-  avatar String?
-
-  client Client?
-
-  refreshTokens RefreshToken[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum InventoryType {
+  PRODUCT
+  EQUIPMENT
 }
 
-model Client {
-  id String @id @default(uuid())
-
-  firstName String
-  lastName  String
-  phone     String?
-
-  avatarUrl String?
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
-
-  memberships Membership[]
-
-  attendances Attendance[]
-
-  reservations Reservation[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum InventoryStatus {
+  AVAILABLE
+  IN_MAINTENANCE
+  DAMAGED
+  RETIRED
 }
 
-model MembershipPlan {
-  id String @id @default(uuid())
-
-  name        String  @unique
-  description String?
-
-  price Float
-
-  duration Int
-
-  isActive Boolean @default(true)
-
-  memberships Membership[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
 }
 
-model Membership {
-  id String @id @default(uuid())
-
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  planId String
-  plan   MembershipPlan @relation(fields: [planId], references: [id])
-
-  startDate DateTime
-  endDate   DateTime
-
-  isActive Boolean @default(true)
-
-  payments Payment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  TERMINAL
 }
 
-model Payment {
-  id String @id @default(uuid())
-
-  membershipId String
-  membership   Membership @relation(fields: [membershipId], references: [id])
-
-  amount Float
-
-  status PaymentStatus @default(PENDING)
-
-  paymentMethod String?
-
-  transactionId String?
-
-  paidAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Attendance {
-  id String @id @default(uuid())
-
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  checkIn DateTime @default(now())
-
-  createdAt DateTime @default(now())
-}
-
-model AuditLog {
-  id String @id @default(uuid())
-
-  userId String?
-
-  action String
-
-  method String
-
-  endpoint String
-
-  ipAddress String?
-
-  payload Json?
-
-  createdAt DateTime @default(now())
-}
-
-model PasswordResetToken {
-  id String @id @default(uuid())
-
-  email String
-
-  token String @unique
-
-  expiresAt DateTime
-
-  createdAt DateTime @default(now())
-}
-
-model RefreshToken {
-  id String @id @default(uuid())
-
-  token String @unique
-
-  userId String
-
-  user User @relation(fields: [userId], references: [id])
-
-  expiresAt DateTime
-
-  createdAt DateTime @default(now())
-}
-
-model Notification {
-  id String @id @default(uuid())
-
-  userId String
-
-  title String
-
-  message String
-
-  isRead Boolean @default(false)
-
-  createdAt DateTime @default(now())
-}
-
-model Class {
-  id String @id @default(uuid())
-
-  name String
-
-  description String?
-
-  capacity Int
-
-  startTime DateTime
-
-  endTime DateTime
-
-  isActive Boolean @default(true)
-
-  reservations Reservation[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Reservation {
-  id String @id @default(uuid())
-
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  classId String
-  class   Class  @relation(fields: [classId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@unique([clientId, classId])
+enum WeightUnit {
+  KG
+  LB
 }
