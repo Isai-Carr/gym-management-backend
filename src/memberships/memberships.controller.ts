@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Role, MembershipStatus } from '@prisma/client';
@@ -43,6 +43,13 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Delete membership plan (Admin)' })
   deletePlan(@Param('id') id: string) {
     return this.membershipsService.deletePlan(id);
+  }
+
+  @Get('my')
+  @Roles(Role.CLIENT)
+  @ApiOperation({ summary: 'Get my active membership (Client)' })
+  getMyMembership(@Request() req: any) {
+    return this.membershipsService.getMyMembership(req.user.id);
   }
 
   @Post()

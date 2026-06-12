@@ -44,6 +44,17 @@ export class MembershipsService {
     return this.prisma.membershipPlan.delete({ where: { id } });
   }
 
+  async getMyMembership(userId: string) {
+    const client = await this.prisma.client.findUnique({ where: { userId } });
+    if (!client) throw new NotFoundException('Client profile not found');
+
+    return this.prisma.membership.findFirst({
+      where: { clientId: client.id, status: MembershipStatus.ACTIVE, endDate: { gte: new Date() } },
+      include: { plan: true, activity: true },
+      orderBy: { endDate: 'desc' },
+    });
+  }
+
   async createMembership(dto: CreateMembershipDto) {
     const client = await this.prisma.client.findUnique({ where: { id: dto.clientId } });
     if (!client) throw new NotFoundException('Client not found');
