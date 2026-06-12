@@ -7,6 +7,7 @@ import { PaymentStatus, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateDirectPaymentDto } from './dto/create-direct-payment.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { TransferPaymentDto } from './dto/transfer-payment.dto';
 
@@ -73,11 +74,11 @@ export class PaymentsService {
     });
   }
 
-  async createCashPayment(dto: CreatePaymentDto) {
+  async createCashPayment(dto: CreateDirectPaymentDto) {
     return this.createPayment({ ...dto, paymentMethod: PaymentMethod.CASH });
   }
 
-  async createTerminalPayment(dto: CreatePaymentDto) {
+  async createTerminalPayment(dto: CreateDirectPaymentDto) {
     return this.createPayment({ ...dto, paymentMethod: PaymentMethod.TERMINAL });
   }
 

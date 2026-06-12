@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateDirectPaymentDto } from './dto/create-direct-payment.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { TransferPaymentDto } from './dto/transfer-payment.dto';
 
@@ -64,7 +65,7 @@ export class PaymentsController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Register cash payment (Admin)' })
-  createCash(@Body() dto: CreatePaymentDto) {
+  createCash(@Body() dto: CreateDirectPaymentDto) {
     return this.paymentsService.createCashPayment(dto);
   }
 
@@ -72,7 +73,7 @@ export class PaymentsController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Register terminal payment (Admin)' })
-  createTerminal(@Body() dto: CreatePaymentDto) {
+  createTerminal(@Body() dto: CreateDirectPaymentDto) {
     return this.paymentsService.createTerminalPayment(dto);
   }
 
