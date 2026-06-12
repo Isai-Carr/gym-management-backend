@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -23,27 +24,31 @@ export class AuthService {
     private readonly emailService: EmailService,
   ) {}
 
-  async registerAdmin(dto: RegisterDto) {
+  private generateTemporaryPassword(): string {
+    return String(Math.floor(1000000 + Math.random() * 9000000));
+  }
+
+  async registerAdmin(dto: CreateAdminDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already exists');
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const temporaryPassword = this.generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         password: hashedPassword,
         role: Role.ADMIN,
-        mustChangePassword: false,
+        mustChangePassword: true,
       },
     });
 
-    const name = [dto.firstName, dto.lastName].filter(Boolean).join(' ') || dto.email;
+    const name = `${dto.firstName} ${dto.lastName}`.trim();
     const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
-    await this.emailService.sendWelcome(dto.email, name, '', loginUrl);
+    await this.emailService.sendWelcome(dto.email, name, temporaryPassword, loginUrl);
 
-    const token = this.generateToken(user.id, user.email, user.role);
     const { password: _p, ...safeUser } = user;
-    return { message: 'Admin registered successfully', token, user: safeUser };
+    return { message: 'Admin registered successfully', user: safeUser };
   }
 
   async register(dto: RegisterDto) {

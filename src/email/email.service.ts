@@ -43,32 +43,54 @@ export class EmailService implements OnModuleInit {
   async sendWelcome(to: string, name: string, tempPassword: string, loginUrl: string) {
     const credentialsSection = tempPassword
       ? `
-        <p>Usa las siguientes credenciales para iniciar sesión:</p>
-        <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px;margin:20px 0">
-          <p><strong>Correo electrónico:</strong> ${to}</p>
-          <p><strong>Contraseña temporal:</strong> <code style="background:#f0f0f0;padding:4px 8px;border-radius:4px">${tempPassword}</code></p>
+        <div style="background:#fff;border:2px solid #2d7a2d;border-radius:10px;padding:24px;margin:24px 0">
+          <h3 style="margin:0 0 16px 0;color:#2d7a2d;font-size:16px;text-transform:uppercase;letter-spacing:1px">
+            Datos de acceso
+          </h3>
+          <table style="width:100%;border-collapse:collapse">
+            <tr>
+              <td style="padding:8px 0;color:#555;font-size:14px;width:40%"><strong>Usuario:</strong></td>
+              <td style="padding:8px 0;font-size:14px">${to}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0;color:#555;font-size:14px"><strong>Contraseña:</strong></td>
+              <td style="padding:8px 0">
+                <span style="background:#f0f7f0;border:1px solid #2d7a2d;color:#2d7a2d;padding:6px 14px;border-radius:6px;font-size:18px;font-weight:bold;letter-spacing:3px;font-family:monospace">
+                  ${tempPassword}
+                </span>
+              </td>
+            </tr>
+          </table>
         </div>
-        <p>Por seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.</p>`
+        <p style="color:#666;font-size:13px">
+          Por seguridad, deberás cambiar tu contraseña la primera vez que inicies sesión.
+        </p>`
       : `<p>Ya puedes acceder al portal con el correo que utilizaste al registrarte.</p>`;
 
     const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-        <div style="background:#2d7a2d;padding:20px;text-align:center">
-          <h1 style="color:#fff;margin:0">Oasis Training Center</h1>
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;background:#ffffff">
+        <div style="background:#2d7a2d;padding:28px 20px;text-align:center">
+          <h1 style="color:#fff;margin:0;font-size:26px;letter-spacing:1px">Oasis Training Center</h1>
+          <p style="color:#c8e6c9;margin:6px 0 0 0;font-size:14px">Sistema de Gestión de Gimnasio</p>
         </div>
-        <div style="padding:30px;background:#f9f9f9">
-          <h2>¡Bienvenido/a, ${name}!</h2>
-          <p>Tu cuenta ha sido creada exitosamente en Oasis Training Center.</p>
+        <div style="padding:32px 36px;background:#f9f9f9">
+          <h2 style="color:#2d2d2d;margin:0 0 8px 0">¡Bienvenido/a, ${name}!</h2>
+          <p style="color:#555;margin:0 0 20px 0">Tu cuenta ha sido creada exitosamente.</p>
           ${credentialsSection}
-          <div style="text-align:center;margin:30px 0">
-            <a href="${loginUrl}" style="background:#2d7a2d;color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:bold">
+          <div style="text-align:center;margin:28px 0">
+            <a href="${loginUrl}"
+               style="background:#2d7a2d;color:#fff;padding:14px 36px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;display:inline-block">
               Acceder al Portal
             </a>
           </div>
-          <p style="color:#888;font-size:12px">Si no esperabas este correo, puedes ignorarlo.</p>
+          <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0">
+          <p style="color:#aaa;font-size:12px;text-align:center;margin:0">
+            Si no esperabas este correo, puedes ignorarlo.<br>
+            © Oasis Training Center
+          </p>
         </div>
       </div>`;
-    return this.sendMail(to, 'Bienvenido a Oasis Training Center', html);
+    return this.sendMail(to, '¡Bienvenido a Oasis Training Center!', html);
   }
 
   async sendPasswordChange(to: string, name: string) {

@@ -11,6 +11,7 @@ import { GetUser } from './decorators/get-user.decorator';
 import { Role } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -31,8 +32,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Register a new admin (Admin only)' })
-  registerAdmin(@Body() dto: RegisterDto) {
+  @ApiOperation({ summary: 'Register a new admin — password is auto-generated and sent by email (Admin only)' })
+  registerAdmin(@Body() dto: CreateAdminDto) {
     return this.authService.registerAdmin(dto);
   }
 
