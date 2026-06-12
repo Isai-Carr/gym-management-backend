@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateClientDto } from './dto/create-client.dto';
+import { RegisterClientFullDto } from './dto/register-client-full.dto';
 import { GetClientsDto } from './dto/get-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -19,8 +20,16 @@ import { UpdateClientDto } from './dto/update-client.dto';
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  @Post('register')
+  @ApiOperation({
+    summary: 'Full client registration: personal info + membership + payment in one step (Admin)',
+  })
+  registerFull(@Body() dto: RegisterClientFullDto) {
+    return this.clientsService.registerFull(dto);
+  }
+
   @Post()
-  @ApiOperation({ summary: 'Create client and send welcome email (Admin)' })
+  @ApiOperation({ summary: 'Create client only (no membership) and send welcome email (Admin)' })
   create(@Body() dto: CreateClientDto) {
     return this.clientsService.create(dto);
   }

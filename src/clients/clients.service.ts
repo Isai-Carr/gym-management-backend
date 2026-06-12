@@ -4,12 +4,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { Role } from '@prisma/client';
+import { PaymentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { GetClientsDto } from './dto/get-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateClientDto } from './dto/create-client.dto';
+import { RegisterClientFullDto } from './dto/register-client-full.dto';
 
 @Injectable()
 export class ClientsService {
@@ -56,6 +57,84 @@ export class ClientsService {
 
     const { password: _pwd, ...safeUser } = user;
     return { message: 'Client created successfully', user: safeUser };
+  }
+
+  async registerFull(dto: RegisterClientFullDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new BadRequestException('Email already in use');
+
+    const plan = await this.prisma.membershipPlan.findUnique({ where: { id: dto.planId } });
+    if (!plan) throw new NotFoundException('Membership plan not found');
+    if (!plan.isActive) throw new BadRequestException('Selected membership plan is not active');
+
+    const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + plan.duration);
+
+    const temporaryPassword = this.generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    const { user, membership, payment } = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          role: Role.CLIENT,
+          mustChangePassword: true,
+          client: {
+            create: {
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              phone: dto.phone,
+            },
+          },
+        },
+        include: { client: true },
+      });
+
+      const membership = await tx.membership.create({
+        data: {
+          clientId: user.client!.id,
+          planId: dto.planId,
+          activityId: dto.activityId ?? null,
+          startDate,
+          endDate,
+          status: 'ACTIVE',
+        },
+        include: { plan: true },
+      });
+
+      const payment = await tx.payment.create({
+        data: {
+          membershipId: membership.id,
+          clientId: user.client!.id,
+          amount: dto.amount,
+          paymentMethod: dto.paymentMethod,
+          transactionId: dto.transactionId ?? null,
+          notes: dto.notes ?? null,
+          status: PaymentStatus.APPROVED,
+          paidAt: new Date(),
+        },
+      });
+
+      return { user, membership, payment };
+    });
+
+    const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
+    await this.emailService.sendWelcome(
+      dto.email,
+      `${dto.firstName} ${dto.lastName}`,
+      temporaryPassword,
+      loginUrl,
+    );
+
+    const { password: _pwd, ...safeUser } = user;
+    return {
+      message: 'Client registered successfully',
+      user: safeUser,
+      membership,
+      payment,
+    };
   }
 
   private readonly ALLOWED_SORT_FIELDS = new Set(['createdAt', 'firstName', 'lastName', 'updatedAt']);
