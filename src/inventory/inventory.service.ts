@@ -56,7 +56,7 @@ export class InventoryService {
     });
   }
 
-  async updateImage(id: string, imageUrl: string) {
+  async updateImage(id: string, imageUrl: string | null) {
     await this.findOne(id);
     return this.prisma.inventory.update({ where: { id }, data: { imageUrl } });
   }

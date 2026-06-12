@@ -72,6 +72,11 @@ export class ClassesService {
   async remove(id: string) {
     await this.findOne(id);
 
+    const reservationCount = await this.prisma.reservation.count({ where: { classId: id } });
+    if (reservationCount > 0) {
+      throw new BadRequestException(`Cannot delete class: it has ${reservationCount} active reservation(s). Cancel them first.`);
+    }
+
     return this.prisma.class.delete({ where: { id } });
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { MembershipStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,6 +35,12 @@ export class MembershipsService {
   async deletePlan(id: string) {
     const plan = await this.prisma.membershipPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Membership plan not found');
+
+    const membershipCount = await this.prisma.membership.count({ where: { planId: id } });
+    if (membershipCount > 0) {
+      throw new BadRequestException(`Cannot delete plan: ${membershipCount} membership(s) are linked to it.`);
+    }
+
     return this.prisma.membershipPlan.delete({ where: { id } });
   }
 

@@ -26,7 +26,10 @@ export class ReservationsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a class reservation' })
-  createReservation(@Body() dto: CreateReservationDto) {
+  createReservation(@Body() dto: CreateReservationDto, @Request() req: any) {
+    if (req.user.role !== 'ADMIN') {
+      dto.clientId = req.user.client?.id;
+    }
     return this.reservationsService.createReservation(dto);
   }
 

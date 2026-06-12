@@ -44,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Account disabled or not found');
     }
 
-    return user;
+    const { password: _pwd, ...safeUser } = user;
+    return safeUser;
   }
 }

@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, Post, Query, UseGuards,
+  Body, Controller, Get, Param, Post, Query, Request, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -18,7 +18,10 @@ export class AttendanceController {
 
   @Post('check-in')
   @ApiOperation({ summary: 'Client check-in — validates active membership' })
-  checkIn(@Body() dto: CreateAttendanceDto) {
+  checkIn(@Body() dto: CreateAttendanceDto, @Request() req: any) {
+    if (req.user.role !== 'ADMIN') {
+      dto.clientId = req.user.client?.id;
+    }
     return this.attendanceService.checkIn(dto);
   }
 

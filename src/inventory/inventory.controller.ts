@@ -71,7 +71,7 @@ export class InventoryController {
   @Delete('delete-image/:id')
   @ApiOperation({ summary: 'Remove inventory item image (Admin)' })
   deleteImage(@Param('id') id: string) {
-    return this.inventoryService.updateImage(id, null as any);
+    return this.inventoryService.updateImage(id, null);
   }
 
   @Get()
