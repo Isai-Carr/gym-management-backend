@@ -31,6 +31,8 @@ model Client {
   firstName      String
   lastName       String
   phone          String?
+  address        String?
+  birthDate      DateTime?
   userId         String           @unique
   avatarUrl      String?
   createdAt      DateTime         @default(now())

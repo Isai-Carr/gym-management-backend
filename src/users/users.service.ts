@@ -51,10 +51,19 @@ export class UsersService {
     const client = await this.prisma.client.findUnique({ where: { userId } });
     if (!client) throw new NotFoundException('Client profile not found');
 
+    const { birthDate, ...rest } = dto;
+
     return this.prisma.client.update({
       where: { userId },
-      data: dto,
-      select: { id: true, firstName: true, lastName: true, phone: true, avatarUrl: true, updatedAt: true },
+      data: {
+        ...rest,
+        ...(birthDate ? { birthDate: new Date(birthDate) } : {}),
+      },
+      select: {
+        id: true, firstName: true, lastName: true,
+        phone: true, address: true, birthDate: true,
+        avatarUrl: true, updatedAt: true,
+      },
     });
   }
 
