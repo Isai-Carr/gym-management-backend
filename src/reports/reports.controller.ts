@@ -90,6 +90,20 @@ export class ReportsController {
     return this.reportsService.getPendingPayments();
   }
 
+  @Get('monthly-income-chart')
+  @ApiOperation({ summary: 'Monthly income totals for last N months — for line chart (Admin)' })
+  @ApiQuery({ name: 'months', required: false, description: 'Number of months back (default 12)' })
+  getMonthlyIncomeChart(@Query('months') months?: string) {
+    return this.reportsService.getMonthlyIncomeChart(months ? +months : 12);
+  }
+
+  @Get('recent-activity')
+  @ApiOperation({ summary: 'Recent activity feed: payments, memberships, check-ins (Admin)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Max events to return (default 20)' })
+  getRecentActivity(@Query('limit') limit?: string) {
+    return this.reportsService.getRecentActivity(limit ? +limit : 20);
+  }
+
   @Get('users-by-activity')
   @ApiOperation({ summary: 'Users per activity (Admin)' })
   getUsersByActivity() {

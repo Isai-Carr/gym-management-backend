@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
 } from 'class-validator';
 
@@ -26,4 +27,12 @@ export class CreateClassDto {
 
   @IsDateString()
   endTime!: string;
+
+  @IsOptional()
+  @IsString()
+  instructorName?: string;
+
+  @IsOptional()
+  @IsUUID()
+  activityId?: string;
 }

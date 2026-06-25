@@ -6,9 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -40,9 +41,10 @@ export class ClassesController {
   }
 
   @Get('schedule')
-  @ApiOperation({ summary: 'Get active class schedule' })
-  getSchedule() {
-    return this.classesService.getSchedule();
+  @ApiOperation({ summary: 'Get active class schedule, optionally filtered by date' })
+  @ApiQuery({ name: 'date', required: false, description: 'Filter by date (YYYY-MM-DD)' })
+  getSchedule(@Query('date') date?: string) {
+    return this.classesService.getSchedule(date);
   }
 
   @Get(':id')

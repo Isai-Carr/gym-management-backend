@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { NotificationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -21,6 +22,7 @@ export class NotificationsService {
     return this.prisma.notification.findMany({
       where: userId ? { userId } : undefined,
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
   }
 
@@ -28,6 +30,7 @@ export class NotificationsService {
     return this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
 
@@ -44,7 +47,7 @@ export class NotificationsService {
     });
   }
 
-  @Cron('0 9 * * *') // every day at 09:00
+  @Cron('0 9 * * *')
   async dailyExpirationWarningJob() {
     const result = await this.sendExpirationWarning();
     this.logger.log(`Daily expiry warning: sent ${result.sent}/${result.processed}`);
@@ -63,45 +66,58 @@ export class NotificationsService {
       include: { client: { include: { user: true } }, plan: true },
     });
 
-    const results = await Promise.allSettled(
-      expiringMemberships.map(async (membership) => {
-        const client = membership.client;
+    if (expiringMemberships.length === 0) {
+      return { processed: 0, sent: 0 };
+    }
 
-        const cutoff = new Date();
-        cutoff.setHours(cutoff.getHours() - 20);
-        const existing = await this.prisma.notification.findFirst({
-          where: {
-            userId: client.userId,
-            type: 'EXPIRY_WARNING',
-            createdAt: { gte: cutoff },
-          },
-        });
-        if (existing) return client.user.email;
+    // Batch-check which users already received a warning in the last 20 hours
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - 20);
 
-        await this.prisma.notification.create({
-          data: {
-            userId: client.userId,
-            title: 'Tu membresía está por vencer',
-            message: `Tu membresía "${membership.plan.name}" vence el ${membership.endDate.toLocaleDateString('es-MX')}`,
-            type: 'EXPIRY_WARNING',
-          },
-        });
+    const userIds = expiringMemberships.map((m) => m.client.userId);
 
-        await this.emailService.sendMembershipExpiring(
-          client.user.email,
-          `${client.firstName} ${client.lastName}`,
-          membership.plan.name,
-          membership.endDate,
-        );
+    const alreadyNotified = await this.prisma.notification.findMany({
+      where: {
+        userId: { in: userIds },
+        type: NotificationType.EXPIRY_WARNING,
+        createdAt: { gte: cutoff },
+      },
+      select: { userId: true },
+    });
 
-        return client.user.email;
-      }),
+    const notifiedSet = new Set(alreadyNotified.map((n) => n.userId));
+
+    const toNotify = expiringMemberships.filter((m) => !notifiedSet.has(m.client.userId));
+
+    if (toNotify.length === 0) {
+      return { processed: expiringMemberships.length, sent: 0 };
+    }
+
+    // Batch-insert all notifications in one query
+    await this.prisma.notification.createMany({
+      data: toNotify.map((m) => ({
+        userId: m.client.userId,
+        title: 'Tu membresía está por vencer',
+        message: `Tu membresía "${m.plan.name}" vence el ${m.endDate.toLocaleDateString('es-MX')}`,
+        type: NotificationType.EXPIRY_WARNING,
+      })),
+      skipDuplicates: true,
+    });
+
+    // Send emails in parallel (external I/O — keep parallel but cap concurrency)
+    const emailResults = await Promise.allSettled(
+      toNotify.map((m) =>
+        this.emailService.sendMembershipExpiring(
+          m.client.user.email,
+          `${m.client.firstName} ${m.client.lastName}`,
+          m.plan.name,
+          m.endDate,
+        ),
+      ),
     );
 
-    return {
-      processed: expiringMemberships.length,
-      sent: results.filter((r) => r.status === 'fulfilled').length,
-    };
+    const sent = emailResults.filter((r) => r.status === 'fulfilled').length;
+    return { processed: expiringMemberships.length, sent };
   }
 
   async sendEmailNotification(userId: string, subject: string, message: string) {
@@ -109,7 +125,7 @@ export class NotificationsService {
     if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.notification.create({
-      data: { userId, title: subject, message, type: 'MANUAL' },
+      data: { userId, title: subject, message, type: NotificationType.MANUAL },
     });
 
     await this.emailService.sendMail(user.email, subject, `<p>${message}</p>`);

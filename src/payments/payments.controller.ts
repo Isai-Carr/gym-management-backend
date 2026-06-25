@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post,
+  Body, Controller, Get, Param, Patch, Post,
   Query, Request, UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -16,6 +16,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateDirectPaymentDto } from './dto/create-direct-payment.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { TransferPaymentDto } from './dto/transfer-payment.dto';
+import { CreateCardPaymentDto } from './dto/create-card-payment.dto';
 
 const voucherStorage = diskStorage({
   destination: join(process.cwd(), 'storage', 'payments'),
@@ -97,13 +98,12 @@ export class PaymentsController {
     return this.paymentsService.rejectPayment(id, req.user.id, reason);
   }
 
-  @Get()
-  @UseGuards(RolesGuard)
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Get all payments (Admin)' })
-  @ApiQuery({ name: 'status', enum: PaymentStatus, required: false })
-  getPayments(@Query('status') status?: PaymentStatus) {
-    return this.paymentsService.getPayments(status);
+  // ── Specific GET routes must come before /:id ────────────────────────────
+
+  @Get('my')
+  @ApiOperation({ summary: 'Get my payment history (Client)' })
+  getMyPayments(@Request() req: any) {
+    return this.paymentsService.getMyPayments(req.user.id);
   }
 
   @Get('pending')
@@ -112,6 +112,21 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Get pending payments (Admin)' })
   getPending() {
     return this.paymentsService.getPendingPayments();
+  }
+
+  @Get('config/mp-public-key')
+  @ApiOperation({ summary: 'Get MercadoPago public key for the frontend SDK' })
+  getMpPublicKey() {
+    return { publicKey: process.env.MERCADOPAGO_PUBLIC_KEY ?? null };
+  }
+
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get all payments (Admin)' })
+  @ApiQuery({ name: 'status', enum: PaymentStatus, required: false })
+  getPayments(@Query('status') status?: PaymentStatus) {
+    return this.paymentsService.getPayments(status);
   }
 
   @Get(':id')
@@ -128,5 +143,30 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Update payment status (Admin)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto) {
     return this.paymentsService.updatePaymentStatus(id, dto);
+  }
+
+  // ── MercadoPago ───────────────────────────────────────────────────────────
+
+  @Post('card')
+  @ApiOperation({
+    summary: 'Pay with credit/debit card via MercadoPago',
+    description:
+      'The frontend tokenizes the card with the MP JS SDK and sends the token here. ' +
+      'The card number never reaches this server.',
+  })
+  createCardPayment(@Body() dto: CreateCardPaymentDto) {
+    return this.paymentsService.createCardPayment(dto);
+  }
+
+  @Post('webhook/mercadopago')
+  @ApiOperation({ summary: 'MercadoPago webhook — do not call manually' })
+  mercadopagoWebhook(
+    @Body() body: any,
+    @Query('id') queryId?: string,
+    @Query('data.id') dataId?: string,
+  ) {
+    const mpPaymentId = body?.data?.id ?? dataId ?? queryId;
+    if (!mpPaymentId || body?.type !== 'payment') return { received: true };
+    return this.paymentsService.handleMercadopagoWebhook(String(mpPaymentId));
   }
 }

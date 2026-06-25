@@ -62,7 +62,7 @@ export class UsersService {
       select: {
         id: true, firstName: true, lastName: true,
         phone: true, address: true, birthDate: true,
-        avatarUrl: true, updatedAt: true,
+        emergencyContact: true, avatarUrl: true, updatedAt: true,
       },
     });
   }

@@ -157,27 +157,38 @@ export class MembershipsService {
   async expireMembershipsJob() {
     const now = new Date();
 
-    const toExpire = await this.prisma.membership.findMany({
-      where: { endDate: { lt: now }, status: MembershipStatus.ACTIVE },
-      include: { client: { include: { user: true } }, plan: true },
+    // Wrap in transaction: find IDs then update ONLY those IDs
+    // prevents race conditions and ensures email list matches what was actually expired
+    const expired = await this.prisma.$transaction(async (tx) => {
+      const toExpire = await tx.membership.findMany({
+        where: { endDate: { lt: now }, status: MembershipStatus.ACTIVE },
+        include: { client: { include: { user: true } }, plan: true },
+      });
+
+      if (toExpire.length === 0) return [];
+
+      await tx.membership.updateMany({
+        where: { id: { in: toExpire.map((m) => m.id) }, status: MembershipStatus.ACTIVE },
+        data: { status: MembershipStatus.EXPIRED, isActive: false },
+      });
+
+      return toExpire;
     });
 
-    if (toExpire.length === 0) return;
+    if (expired.length === 0) return;
 
-    await this.prisma.membership.updateMany({
-      where: { endDate: { lt: now }, status: MembershipStatus.ACTIVE },
-      data: { status: MembershipStatus.EXPIRED, isActive: false },
-    });
+    // Send emails after transaction commits — external I/O stays outside the tx
+    await Promise.allSettled(
+      expired.map((m) =>
+        this.emailService.sendMembershipExpired(
+          m.client.user.email,
+          `${m.client.firstName} ${m.client.lastName}`,
+          m.plan.name,
+          m.endDate,
+        ),
+      ),
+    );
 
-    for (const m of toExpire) {
-      await this.emailService.sendMembershipExpired(
-        m.client.user.email,
-        `${m.client.firstName} ${m.client.lastName}`,
-        m.plan.name,
-        m.endDate,
-      );
-    }
-
-    this.logger.log(`Expired ${toExpire.length} memberships`);
+    this.logger.log(`Expired ${expired.length} memberships`);
   }
 }

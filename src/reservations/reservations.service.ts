@@ -14,22 +14,25 @@ export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createReservation(dto: CreateReservationDto) {
-    const gymClass = await this.prisma.class.findUnique({
-      where: { id: dto.classId },
-      include: { reservations: true },
-    });
+    // Wrap in transaction so capacity check + insert are atomic
+    return this.prisma.$transaction(async (tx) => {
+      const gymClass = await tx.class.findUnique({
+        where: { id: dto.classId },
+        include: { reservations: { select: { id: true } } },
+      });
 
-    if (!gymClass) {
-      throw new NotFoundException('Class not found');
-    }
+      if (!gymClass) {
+        throw new NotFoundException('Class not found');
+      }
 
-    if (gymClass.reservations.length >= gymClass.capacity) {
-      throw new BadRequestException('Class is full');
-    }
+      if (gymClass.reservations.length >= gymClass.capacity) {
+        throw new BadRequestException('Class is full');
+      }
 
-    return this.prisma.reservation.create({
-      data: dto,
-      include: { client: true, class: true },
+      return tx.reservation.create({
+        data: dto,
+        include: { client: true, class: true },
+      });
     });
   }
 

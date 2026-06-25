@@ -80,11 +80,4 @@ export class AttendanceService {
     });
   }
 
-  async findByDateRange(startDate: Date, endDate: Date) {
-    return this.prisma.attendance.findMany({
-      where: { checkIn: { gte: startDate, lte: endDate } },
-      include: { client: true, activity: true },
-      orderBy: { checkIn: 'desc' },
-    });
-  }
 }

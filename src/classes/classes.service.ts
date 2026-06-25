@@ -80,10 +80,23 @@ export class ClassesService {
     return this.prisma.class.delete({ where: { id } });
   }
 
-  async getSchedule() {
+  async getSchedule(date?: string) {
+    const where: Record<string, unknown> = { isActive: true };
+
+    if (date) {
+      const day = new Date(date);
+      if (!isNaN(day.getTime())) {
+        where.startTime = {
+          gte: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0),
+          lte: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59),
+        };
+      }
+    }
+
     return this.prisma.class.findMany({
-      where: { isActive: true },
+      where,
       include: {
+        activity: { select: { id: true, name: true } },
         _count: { select: { reservations: true } },
       },
       orderBy: { startTime: 'asc' },

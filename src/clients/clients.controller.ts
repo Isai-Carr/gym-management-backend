@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -38,6 +38,13 @@ export class ClientsController {
   @ApiOperation({ summary: 'Get all clients with pagination and search (Admin)' })
   findAll(@Query() query: GetClientsDto) {
     return this.clientsService.findAll(query);
+  }
+
+  @Get('me/stats')
+  @Roles(Role.CLIENT, Role.ADMIN)
+  @ApiOperation({ summary: 'Get my dashboard stats: classes this month, PRs, streak (Client)' })
+  getMyStats(@Request() req: any) {
+    return this.clientsService.getMyStats(req.user.id);
   }
 
   @Get(':id')

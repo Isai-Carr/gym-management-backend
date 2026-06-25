@@ -61,7 +61,7 @@ export class AuthService {
         email: dto.email,
         password: hashedPassword,
         role: Role.CLIENT,
-        mustChangePassword: true,
+        mustChangePassword: false,
         client: {
           create: {
             firstName: dto.firstName ?? '',

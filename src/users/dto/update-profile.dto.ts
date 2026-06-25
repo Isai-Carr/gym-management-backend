@@ -26,4 +26,9 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsDateString()
   birthDate?: string;
+
+  @ApiPropertyOptional({ example: 'María Pérez - +52 55 9876 5432' })
+  @IsOptional()
+  @IsString()
+  emergencyContact?: string;
 }

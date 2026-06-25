@@ -7,33 +7,164 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getDashboardMetrics() {
+    const now = new Date();
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
     const [
       totalClients,
+      newClientsThisMonth,
+      newClientsLastMonth,
       activeMemberships,
+      totalMemberships,
       expiredMemberships,
       pendingPayments,
-      revenueResult,
+      revenueThisMonth,
+      revenueLastMonth,
       totalEquipment,
+      membershipsByPlanRaw,
     ] = await Promise.all([
       this.prisma.client.count(),
-      this.prisma.membership.count({ where: { status: 'ACTIVE', endDate: { gte: new Date() } } }),
-      this.prisma.membership.count({ where: { OR: [{ status: 'EXPIRED' }, { endDate: { lt: new Date() } }] } }),
+      this.prisma.client.count({ where: { createdAt: { gte: startOfThisMonth } } }),
+      this.prisma.client.count({ where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } } }),
+      this.prisma.membership.count({ where: { status: 'ACTIVE', endDate: { gte: now } } }),
+      this.prisma.membership.count(),
+      this.prisma.membership.count({ where: { OR: [{ status: 'EXPIRED' }, { endDate: { lt: now } }] } }),
       this.prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
       this.prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { status: PaymentStatus.APPROVED },
+        where: { status: PaymentStatus.APPROVED, paidAt: { gte: startOfThisMonth } },
+      }),
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: PaymentStatus.APPROVED, paidAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
       }),
       this.prisma.inventory.count({ where: { type: 'EQUIPMENT' } }),
+      this.prisma.membership.groupBy({
+        by: ['planId'],
+        where: { status: 'ACTIVE', endDate: { gte: now } },
+        _count: { id: true },
+      }),
     ]);
+
+    const planIds = membershipsByPlanRaw.map((b) => b.planId).filter(Boolean) as string[];
+    const plans = await this.prisma.membershipPlan.findMany({
+      where: { id: { in: planIds } },
+      select: { id: true, name: true },
+    });
+    const planMap = new Map(plans.map((p) => [p.id, p.name]));
+
+    const membershipsByPlan = membershipsByPlanRaw.map((b) => ({
+      planId: b.planId,
+      planName: planMap.get(b.planId ?? '') ?? 'Sin plan',
+      count: b._count.id,
+    }));
+
+    const revenueThisMonthTotal = revenueThisMonth._sum.amount?.toNumber() ?? 0;
+    const revenueLastMonthTotal = revenueLastMonth._sum.amount?.toNumber() ?? 0;
+    const revenueDeltaPct =
+      revenueLastMonthTotal > 0
+        ? +((((revenueThisMonthTotal - revenueLastMonthTotal) / revenueLastMonthTotal) * 100).toFixed(1))
+        : null;
+
+    const newClientsLast30Days = await this.prisma.client.count({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+    });
 
     return {
       totalClients,
+      newClientsThisMonth,
+      newClientsLastMonth,
+      newClientsLast30Days,
       activeMemberships,
+      totalMemberships,
+      activeMembershipsPercentage:
+        totalMemberships > 0 ? +((activeMemberships / totalMemberships) * 100).toFixed(1) : 0,
       expiredMemberships,
       pendingPayments,
-      totalRevenue: revenueResult._sum.amount ?? 0,
+      revenueThisMonth: revenueThisMonthTotal,
+      revenueLastMonth: revenueLastMonthTotal,
+      revenueDeltaPct,
       totalEquipment,
+      membershipsByPlan,
     };
+  }
+
+  async getMonthlyIncomeChart(months = 12) {
+    const now = new Date();
+    const result: { year: number; month: number; label: string; total: number }[] = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+
+      const agg = await this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: PaymentStatus.APPROVED, paidAt: { gte: start, lte: end } },
+      });
+
+      const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      result.push({
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        label: labels[d.getMonth()],
+        total: agg._sum.amount?.toNumber() ?? 0,
+      });
+    }
+
+    return result;
+  }
+
+  async getRecentActivity(limit = 20) {
+    const [recentPayments, recentMemberships, recentAttendances] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: { status: PaymentStatus.APPROVED },
+        include: { membership: { include: { client: true, plan: true } } },
+        orderBy: { paidAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.membership.findMany({
+        include: { client: true, plan: true },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.attendance.findMany({
+        include: { client: true, activity: true },
+        orderBy: { checkIn: 'desc' },
+        take: limit,
+      }),
+    ]);
+
+    const feed = [
+      ...recentPayments.map((p) => ({
+        type: 'payment' as const,
+        clientName: `${p.membership.client.firstName} ${p.membership.client.lastName}`,
+        description: `Pago aprobado • ${p.membership.plan.name}`,
+        amount: p.amount ? Number(p.amount) : null,
+        timestamp: p.paidAt ?? p.createdAt,
+      })),
+      ...recentMemberships.map((m) => ({
+        type: 'membership' as const,
+        clientName: `${m.client.firstName} ${m.client.lastName}`,
+        description: `Nueva membresía • ${m.plan.name}`,
+        amount: null,
+        timestamp: m.createdAt,
+      })),
+      ...recentAttendances.map((a) => ({
+        type: 'attendance' as const,
+        clientName: `${a.client.firstName} ${a.client.lastName}`,
+        description: `Check-in${a.activity ? ` • ${a.activity.name}` : ''}`,
+        amount: null,
+        timestamp: a.checkIn,
+      })),
+    ];
+
+    return feed
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
   }
 
   async getMonthlyIncome(year?: number, month?: number) {
@@ -44,37 +175,53 @@ export class ReportsService {
     const start = new Date(targetYear, targetMonth - 1, 1);
     const end = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 
-    const payments = await this.prisma.payment.findMany({
-      where: {
-        status: PaymentStatus.APPROVED,
-        paidAt: { gte: start, lte: end },
-      },
-      include: { membership: { include: { client: true, plan: true } } },
-    });
+    const where = {
+      status: PaymentStatus.APPROVED,
+      paidAt: { gte: start, lte: end },
+    };
 
-    const total = payments.reduce((sum, p) => sum + p.amount, 0);
+    const [payments, aggregated] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where,
+        include: { membership: { include: { client: true, plan: true } } },
+        orderBy: { paidAt: 'asc' },
+        take: 500,
+      }),
+      this.prisma.payment.aggregate({ _sum: { amount: true }, where }),
+    ]);
 
     return {
       year: targetYear,
       month: targetMonth,
-      total,
+      total: aggregated._sum.amount?.toNumber() ?? 0,
       count: payments.length,
       payments,
     };
   }
 
   async getRevenueByPeriod(startDate: string, endDate: string) {
-    const payments = await this.prisma.payment.findMany({
-      where: {
-        status: PaymentStatus.APPROVED,
-        paidAt: { gte: new Date(startDate), lte: new Date(endDate) },
-      },
-      include: { membership: { include: { client: true, plan: true } } },
-      orderBy: { paidAt: 'asc' },
-    });
+    const where = {
+      status: PaymentStatus.APPROVED,
+      paidAt: { gte: new Date(startDate), lte: new Date(endDate) },
+    };
 
-    const total = payments.reduce((sum, p) => sum + p.amount, 0);
-    return { startDate, endDate, total, count: payments.length, payments };
+    const [payments, aggregated] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where,
+        include: { membership: { include: { client: true, plan: true } } },
+        orderBy: { paidAt: 'asc' },
+        take: 1000,
+      }),
+      this.prisma.payment.aggregate({ _sum: { amount: true }, where }),
+    ]);
+
+    return {
+      startDate,
+      endDate,
+      total: aggregated._sum.amount?.toNumber() ?? 0,
+      count: payments.length,
+      payments,
+    };
   }
 
   async getRevenueReport() {
@@ -82,6 +229,7 @@ export class ReportsService {
       where: { status: PaymentStatus.APPROVED },
       include: { membership: { include: { client: true, plan: true } } },
       orderBy: { paidAt: 'desc' },
+      take: 1000,
     });
   }
 
@@ -97,6 +245,7 @@ export class ReportsService {
       where,
       include: { client: true, activity: true },
       orderBy: { checkIn: 'desc' },
+      take: 1000,
     });
   }
 
@@ -125,6 +274,7 @@ export class ReportsService {
       where: { OR: [{ status: 'EXPIRED' }, { endDate: { lt: new Date() } }] },
       include: { client: true, plan: true },
       orderBy: { endDate: 'desc' },
+      take: 500,
     });
   }
 
@@ -139,16 +289,13 @@ export class ReportsService {
     const limitDate = new Date();
     limitDate.setDate(limitDate.getDate() - 30);
 
-    const recentClientIds = await this.prisma.attendance.findMany({
-      where: { checkIn: { gte: limitDate } },
-      select: { clientId: true },
-      distinct: ['clientId'],
-    });
-
-    const activeIds = recentClientIds.map((a) => a.clientId);
-
+    // Use Prisma relation filter (none) instead of loading IDs into JS then NOT IN
     return this.prisma.client.findMany({
-      where: { id: { notIn: activeIds } },
+      where: {
+        attendances: {
+          none: { checkIn: { gte: limitDate } },
+        },
+      },
       include: { memberships: { where: { status: 'ACTIVE' } } },
     });
   }
@@ -176,10 +323,9 @@ export class ReportsService {
   }
 
   async getUsersByActivity() {
-    const activities = await this.prisma.activity.findMany({
+    return this.prisma.activity.findMany({
       include: { _count: { select: { memberships: true, attendances: true } } },
     });
-    return activities;
   }
 
   async getPaymentsReport(startDate?: string, endDate?: string) {
@@ -194,6 +340,7 @@ export class ReportsService {
       where,
       include: { membership: { include: { client: true, plan: true } } },
       orderBy: { createdAt: 'desc' },
+      take: 1000,
     });
   }
 }

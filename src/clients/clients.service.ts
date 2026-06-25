@@ -213,4 +213,63 @@ export class ClientsService {
       orderBy: { checkIn: 'desc' },
     });
   }
+
+  async getMyStats(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { client: { select: { id: true } } },
+    });
+    if (!user?.client) throw new NotFoundException('Client profile not found');
+
+    const clientId = user.client.id;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [classesThisMonth, prsThisMonth, recentAttendances] = await Promise.all([
+      this.prisma.attendance.count({
+        where: { clientId, checkIn: { gte: startOfMonth } },
+      }),
+      this.prisma.personalRecord.count({
+        where: { client: { userId }, createdAt: { gte: startOfMonth } },
+      }),
+      this.prisma.attendance.findMany({
+        where: { clientId },
+        select: { checkIn: true },
+        orderBy: { checkIn: 'desc' },
+        take: 365,
+      }),
+    ]);
+
+    return {
+      classesThisMonth,
+      prsThisMonth,
+      currentStreak: this.calculateStreak(recentAttendances.map((a) => a.checkIn)),
+    };
+  }
+
+  private calculateStreak(checkIns: Date[]): number {
+    if (checkIns.length === 0) return 0;
+
+    const MS_PER_DAY = 86_400_000;
+    const toDay = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+    const uniqueDays = [...new Set(checkIns.map(toDay))].sort((a, b) => b - a);
+
+    const todayMs = toDay(new Date());
+    const yesterdayMs = todayMs - MS_PER_DAY;
+
+    // Streak breaks if the last session was before yesterday
+    if (uniqueDays[0] < yesterdayMs) return 0;
+
+    let streak = 1;
+    for (let i = 1; i < uniqueDays.length; i++) {
+      if (uniqueDays[i - 1] - uniqueDays[i] === MS_PER_DAY) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
 }
