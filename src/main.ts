@@ -91,6 +91,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  console.error('Fatal error during bootstrap:', err);
-  process.exit(1);
+  process.stderr.write(`Fatal error during bootstrap: ${err?.message ?? err}\n${err?.stack ?? ''}\n`, () => {
+    process.exit(1);
+  });
 });
