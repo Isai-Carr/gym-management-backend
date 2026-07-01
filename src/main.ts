@@ -90,4 +90,7 @@ async function bootstrap() {
   console.log(`💚 Health check: http://localhost:${port}/api/v1/health`);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('Fatal error during bootstrap:', err);
+  process.exit(1);
+});
