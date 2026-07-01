@@ -1,0 +1,12 @@
+.env
+.env.*
+node_modules/
+dist/
+storage/
+*.log
+server.err
+AUDIT_REPORT.md
+PHASE_1_AUDIT.md
+PHASE_1_REPORT.md
+PHASE_1_VALIDATION.md
+.tools/
