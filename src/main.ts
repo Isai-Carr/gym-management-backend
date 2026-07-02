@@ -82,8 +82,8 @@ async function bootstrap() {
   });
 
   // ── Server ───────────────────────────────────────────────────────────────
-  const port = process.env.PORT ?? 3000;
-  await app.listen(port);
+ const port = Number(process.env.PORT);
+await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 Oasis Training Center API running on port ${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);
