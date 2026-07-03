@@ -1,28 +1,20 @@
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --legacy-peer-deps
-
-ARG CACHEBUST=1
-COPY . .
-RUN npx prisma generate
-RUN npm run build
-
-# ── Production stage ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:20-alpine
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install all dependencies (dev included for build)
 COPY package*.json ./
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/prisma ./prisma
+# Copy prisma schema and generate client
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Copy source and build
+COPY . .
+RUN npm run build
 
 RUN mkdir -p storage/profiles storage/inventory storage/payments
 
