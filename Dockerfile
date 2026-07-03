@@ -2,9 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-
-# Install all dependencies (dev included for build)
+# Install all dependencies (dev included so nest CLI is available for build)
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
@@ -17,6 +15,8 @@ COPY . .
 RUN npm run build
 
 RUN mkdir -p storage/profiles storage/inventory storage/payments
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
