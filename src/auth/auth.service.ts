@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { generateTemporaryPassword } from '../common/utils/temporary-password.util';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -24,15 +25,18 @@ export class AuthService {
     private readonly emailService: EmailService,
   ) {}
 
-  private generateTemporaryPassword(): string {
-    return String(Math.floor(1000000 + Math.random() * 9000000));
+  // Refresh/reset tokens are high-entropy random values (not user-chosen secrets),
+  // so a fast, unsalted SHA-256 digest is sufficient to keep the DB copy useless on its own
+  // while still allowing an exact-match lookup by the raw token the client presents.
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   async registerAdmin(dto: CreateAdminDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already exists');
 
-    const temporaryPassword = this.generateTemporaryPassword();
+    const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
     const user = await this.prisma.user.create({
       data: {
@@ -100,7 +104,7 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
     await this.prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        token: this.hashToken(refreshToken),
         userId: user.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
@@ -133,7 +137,7 @@ export class AuthService {
     expiresAt.setHours(expiresAt.getHours() + 1);
 
     await this.prisma.passwordResetToken.create({
-      data: { email: dto.email, token, expiresAt },
+      data: { email: dto.email, token: this.hashToken(token), expiresAt },
     });
 
     const resetUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/reset-password?token=${token}`;
@@ -147,7 +151,10 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string) {
-    const resetToken = await this.prisma.passwordResetToken.findUnique({ where: { token } });
+    const hashedToken = this.hashToken(token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { token: hashedToken },
+    });
     if (!resetToken) throw new BadRequestException('Invalid or expired token');
     if (new Date() > resetToken.expiresAt) throw new BadRequestException('Token expired');
 
@@ -156,7 +163,7 @@ export class AuthService {
       where: { email: resetToken.email },
       data: { password: hashedPassword, mustChangePassword: false },
     });
-    await this.prisma.passwordResetToken.delete({ where: { token } });
+    await this.prisma.passwordResetToken.deleteMany({ where: { token: hashedToken } });
 
     return { message: 'Password reset successful' };
   }
@@ -164,7 +171,9 @@ export class AuthService {
   async refreshToken(dto: RefreshTokenDto) {
     try {
       const payload = await this.jwtService.verifyAsync(dto.refreshToken);
-      const stored = await this.prisma.refreshToken.findUnique({ where: { token: dto.refreshToken } });
+      const stored = await this.prisma.refreshToken.findUnique({
+        where: { token: this.hashToken(dto.refreshToken) },
+      });
       if (!stored || stored.expiresAt < new Date()) {
         throw new UnauthorizedException('Refresh token expired');
       }
@@ -179,7 +188,7 @@ export class AuthService {
   async logout(userId: string, refreshToken?: string) {
     if (refreshToken) {
       await this.prisma.refreshToken.deleteMany({
-        where: { userId, token: refreshToken },
+        where: { userId, token: this.hashToken(refreshToken) },
       });
     }
     return { message: 'Logout successful' };

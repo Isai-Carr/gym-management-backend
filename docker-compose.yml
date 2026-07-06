@@ -44,15 +44,13 @@ services:
       MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY:-}
       APP_URL: ${APP_URL:-http://localhost:3000}
     volumes:
-      - storage_profiles:/app/storage/profiles
-      - storage_inventory:/app/storage/inventory
-      - storage_payments:/app/storage/payments
+      # Single volume for the whole storage/ tree — mirrors the one-volume-per-service
+      # limit on Railway, so local dev and production use the same layout.
+      - storage_data:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
-  storage_profiles:
-  storage_inventory:
-  storage_payments:
+  storage_data:

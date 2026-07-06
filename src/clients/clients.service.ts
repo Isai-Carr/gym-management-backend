@@ -11,6 +11,7 @@ import { GetClientsDto } from './dto/get-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { RegisterClientFullDto } from './dto/register-client-full.dto';
+import { generateTemporaryPassword } from '../common/utils/temporary-password.util';
 
 @Injectable()
 export class ClientsService {
@@ -19,15 +20,11 @@ export class ClientsService {
     private readonly emailService: EmailService,
   ) {}
 
-  private generateTemporaryPassword(): string {
-    return String(Math.floor(1000000 + Math.random() * 9000000));
-  }
-
   async create(dto: CreateClientDto) {
     const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existingUser) throw new BadRequestException('Email already in use');
 
-    const temporaryPassword = this.generateTemporaryPassword();
+    const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const user = await this.prisma.user.create({
@@ -71,7 +68,7 @@ export class ClientsService {
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + plan.duration);
 
-    const temporaryPassword = this.generateTemporaryPassword();
+    const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const { user, membership, payment } = await this.prisma.$transaction(async (tx) => {

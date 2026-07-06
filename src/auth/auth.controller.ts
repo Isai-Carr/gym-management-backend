@@ -8,6 +8,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
+import { AllowMustChangePassword } from './decorators/allow-must-change-password.decorator';
 import { Role } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -64,6 +65,7 @@ export class AuthController {
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
+  @AllowMustChangePassword()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout (invalidate refresh token)' })
   logout(@Request() req: any, @Body() dto: RefreshTokenDto) {
@@ -72,6 +74,7 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
+  @AllowMustChangePassword()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change password (requires current password)' })
   changePassword(@GetUser('id') userId: string, @Body() dto: ChangePasswordDto) {

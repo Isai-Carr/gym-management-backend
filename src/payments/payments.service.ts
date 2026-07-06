@@ -4,7 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PaymentStatus, PaymentMethod } from '@prisma/client';
+import { PaymentStatus, PaymentMethod, MembershipStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { MercadopagoService } from './mercadopago.service';
@@ -127,17 +127,30 @@ export class PaymentsService {
     // Atomic: only updates if STILL PENDING — eliminates the check-then-act race condition
     const current = await this.prisma.payment.findUnique({
       where: { id },
-      select: { id: true, status: true, notes: true },
+      select: { id: true, status: true, notes: true, membershipId: true },
     });
     if (!current) throw new NotFoundException('Payment not found');
 
-    const result = await this.prisma.payment.updateMany({
-      where: { id, status: PaymentStatus.PENDING },
-      data: {
-        status: PaymentStatus.REJECTED,
-        approvedBy: adminId,
-        notes: reason ?? current.notes,
-      },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.payment.updateMany({
+        where: { id, status: PaymentStatus.PENDING },
+        data: {
+          status: PaymentStatus.REJECTED,
+          approvedBy: adminId,
+          notes: reason ?? current.notes,
+        },
+      });
+
+      if (updateResult.count === 0) return updateResult;
+
+      // Rejecting the payment that a membership was riding on must revoke that access —
+      // createMembership/createTransferPayment activate the membership before payment is confirmed.
+      await tx.membership.updateMany({
+        where: { id: current.membershipId, status: MembershipStatus.ACTIVE },
+        data: { status: MembershipStatus.SUSPENDED, isActive: false },
+      });
+
+      return updateResult;
     });
 
     if (result.count === 0) {

@@ -13,8 +13,10 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // ── Static file serving ──────────────────────────────────────────────────
+  // Both prefixes are served out of the same `storage/` tree so a single
+  // persistent volume (Railway allows only one per service) covers all uploads.
   app.useStaticAssets(join(process.cwd(), 'storage'), { prefix: '/storage/' });
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+  app.useStaticAssets(join(process.cwd(), 'storage', 'uploads'), { prefix: '/uploads/' });
 
   // ── Global prefix & versioning ──────────────────────────────────────────
   app.setGlobalPrefix('api/v1');
@@ -82,8 +84,8 @@ async function bootstrap() {
   });
 
   // ── Server ───────────────────────────────────────────────────────────────
- const port = Number(process.env.PORT);
-await app.listen(port, '0.0.0.0');
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 Oasis Training Center API running on port ${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);

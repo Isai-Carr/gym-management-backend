@@ -14,7 +14,7 @@ RUN npx prisma generate
 COPY . .
 RUN npm run build
 
-RUN mkdir -p storage/profiles storage/inventory storage/payments
+RUN mkdir -p storage/profiles storage/inventory storage/payments storage/uploads
 
 ENV NODE_ENV=production
 

@@ -23,8 +23,9 @@ export class EmailService implements OnModuleInit {
       await this.transporter.verify();
       this.logger.log(`SMTP OK — ${process.env.SMTP_HOST}:${port}`);
     } catch (err: any) {
-      this.logger.error(`SMTP connection failed — ${err.message}`);
-      throw new Error(`SMTP verification failed: ${err.message}`);
+      this.logger.error(
+        `SMTP connection failed — emails will not be sent until this is fixed: ${err.message}`,
+      );
     }
   }
 

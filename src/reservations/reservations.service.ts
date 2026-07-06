@@ -14,8 +14,26 @@ export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createReservation(dto: CreateReservationDto) {
-    // Wrap in transaction so capacity check + insert are atomic
+    // Wrap in transaction so membership check + capacity check + insert are atomic
     return this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.findUnique({
+        where: { id: dto.clientId },
+        include: {
+          memberships: {
+            where: { isActive: true, status: 'ACTIVE', endDate: { gte: new Date() } },
+            take: 1,
+          },
+        },
+      });
+
+      if (!client) {
+        throw new NotFoundException('Client not found');
+      }
+
+      if (client.memberships.length === 0) {
+        throw new BadRequestException('Client does not have an active membership');
+      }
+
       const gymClass = await tx.class.findUnique({
         where: { id: dto.classId },
         include: { reservations: { select: { id: true } } },
