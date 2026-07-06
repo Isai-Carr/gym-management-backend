@@ -7,7 +7,7 @@ export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
   private transporter: Transporter;
 
-  async onModuleInit() {
+  onModuleInit() {
     const port = Number(process.env.SMTP_PORT ?? 587);
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -19,14 +19,16 @@ export class EmailService implements OnModuleInit {
       },
     });
 
-    try {
-      await this.transporter.verify();
-      this.logger.log(`SMTP OK — ${process.env.SMTP_HOST}:${port}`);
-    } catch (err: any) {
-      this.logger.error(
-        `SMTP connection failed — emails will not be sent until this is fixed: ${err.message}`,
+    // Intentionally not awaited: a slow/hanging SMTP handshake (e.g. Gmail from
+    // Railway's network) must never delay app bootstrap past the healthcheck window.
+    this.transporter
+      .verify()
+      .then(() => this.logger.log(`SMTP OK — ${process.env.SMTP_HOST}:${port}`))
+      .catch((err: any) =>
+        this.logger.error(
+          `SMTP connection failed — emails will not be sent until this is fixed: ${err.message}`,
+        ),
       );
-    }
   }
 
   private get from() {
