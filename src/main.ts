@@ -9,8 +9,34 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { AuditService } from './audit/audit.service';
 
+console.log('main.ts loaded');
+
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION');
+  console.error(err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION');
+  console.error(err);
+});
+
+process.on('exit', (code) => {
+  console.log('PROCESS EXIT', code);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM RECEIVED');
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT RECEIVED');
+});
+
 async function bootstrap() {
+  console.log('Before NestFactory.create()');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  console.log('NestFactory.create() completed');
 
   // ── Static file serving ──────────────────────────────────────────────────
   // Both prefixes are served out of the same `storage/` tree so a single

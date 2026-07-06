@@ -9,15 +9,19 @@ RUN npm ci --legacy-peer-deps
 # Copy prisma schema and generate client
 COPY prisma ./prisma
 RUN npx prisma generate
+RUN ls node_modules/.prisma
 
 # Copy source and build
 COPY . .
 RUN npm run build
+RUN ls -R dist
 
 RUN mkdir -p storage/profiles storage/inventory storage/payments storage/uploads
+
+RUN chmod +x docker-entrypoint.sh
 
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
