@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eux
 
+echo "===== DIAGNOSTIC HOLD: sleeping 300s so we can SSH in and inspect ====="
+sleep 300
+
 echo "===== START ====="
 
 echo "Node version:"
