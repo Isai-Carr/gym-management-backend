@@ -4,6 +4,7 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 
 import { Request, Response } from 'express';
@@ -12,7 +13,18 @@ import { Request, Response } from 'express';
 export class HttpExceptionFilter
   implements ExceptionFilter
 {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
+    if (!(exception instanceof HttpException)) {
+      // Unexpected (non-HTTP) errors were previously swallowed with no trace
+      // anywhere, making 500s undebuggable without reproducing locally.
+      this.logger.error(
+        exception instanceof Error ? exception.message : String(exception),
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
+
     const ctx = host.switchToHttp();
 
     const response = ctx.getResponse<Response>();
