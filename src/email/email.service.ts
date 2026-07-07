@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { lookup } from 'dns/promises';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
 
@@ -8,34 +9,46 @@ export class EmailService implements OnModuleInit {
   private transporter: Transporter;
 
   onModuleInit() {
+    // Intentionally not awaited (and this whole method deliberately isn't
+    // async): a slow/hanging SMTP handshake (e.g. Gmail from Railway's
+    // network) must never delay app bootstrap past the healthcheck window.
+    this.setupTransporter().catch((err: any) =>
+      this.logger.error(`SMTP setup failed: ${err.message}`),
+    );
+  }
+
+  private async setupTransporter() {
+    const host = process.env.SMTP_HOST!;
     const port = Number(process.env.SMTP_PORT ?? 587);
+
+    // Railway's network can't route IPv6 to Gmail (ENETUNREACH on the AAAA
+    // record), but nodemailer's smtp-connection resolves the host and connects
+    // itself — it doesn't expose a `family` option, and binding localAddress
+    // to '0.0.0.0' fails with EINVAL (not a valid outbound bind address).
+    // Resolving to a concrete IPv4 address ourselves and connecting to that
+    // sidesteps the issue entirely; `tls.servername` keeps certificate
+    // validation checking against the real hostname.
+    let connectHost = host;
+    try {
+      const resolved = await lookup(host, { family: 4 });
+      connectHost = resolved.address;
+    } catch (err: any) {
+      this.logger.warn(`Could not resolve ${host} to IPv4, using hostname as-is: ${err.message}`);
+    }
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+      host: connectHost,
       port,
       secure: port === 465,
-      // Railway's network can't route IPv6 to Gmail (ENETUNREACH on the AAAA
-      // record). `dns.setDefaultResultOrder('ipv4first')` alone doesn't help —
-      // smtp-connection resolves the host itself and only forwards a handful of
-      // known option keys to net/tls.connect(), `family` not among them.
-      // Binding the local address to an IPv4 one forces an IPv4-only socket,
-      // since it can't then connect out to an IPv6 remote address.
-      localAddress: '0.0.0.0',
+      tls: { servername: host },
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
     });
 
-    // Intentionally not awaited: a slow/hanging SMTP handshake (e.g. Gmail from
-    // Railway's network) must never delay app bootstrap past the healthcheck window.
-    this.transporter
-      .verify()
-      .then(() => this.logger.log(`SMTP OK — ${process.env.SMTP_HOST}:${port}`))
-      .catch((err: any) =>
-        this.logger.error(
-          `SMTP connection failed — emails will not be sent until this is fixed: ${err.message}`,
-        ),
-      );
+    await this.transporter.verify();
+    this.logger.log(`SMTP OK — ${host} (${connectHost}):${port}`);
   }
 
   private get from() {
