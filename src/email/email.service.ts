@@ -13,6 +13,13 @@ export class EmailService implements OnModuleInit {
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465,
+      // Railway's network can't route IPv6 to Gmail (ENETUNREACH on the AAAA
+      // record). `dns.setDefaultResultOrder('ipv4first')` alone doesn't help —
+      // smtp-connection resolves the host itself and only forwards a handful of
+      // known option keys to net/tls.connect(), `family` not among them.
+      // Binding the local address to an IPv4 one forces an IPv4-only socket,
+      // since it can't then connect out to an IPv6 remote address.
+      localAddress: '0.0.0.0',
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
