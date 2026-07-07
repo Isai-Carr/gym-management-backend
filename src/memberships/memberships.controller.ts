@@ -9,6 +9,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
+import { ChangeMembershipPlanDto } from './dto/change-membership-plan.dto';
 
 @ApiTags('Memberships')
 @ApiBearerAuth()
@@ -107,5 +108,12 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Renew membership (Admin)' })
   renew(@Param('id') id: string, @Body('days') days?: number) {
     return this.membershipsService.renewMembership(id, days);
+  }
+
+  @Patch(':id/change-plan')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Switch a membership to a different plan, starting a fresh billing period (Admin)' })
+  changePlan(@Param('id') id: string, @Body() dto: ChangeMembershipPlanDto) {
+    return this.membershipsService.changePlan(id, dto);
   }
 }

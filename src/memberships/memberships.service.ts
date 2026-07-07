@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
+import { ChangeMembershipPlanDto } from './dto/change-membership-plan.dto';
 
 @Injectable()
 export class MembershipsService {
@@ -135,6 +136,35 @@ export class MembershipsService {
       where: { id },
       data: {
         endDate: newEndDate,
+        status: MembershipStatus.ACTIVE,
+        isActive: true,
+      },
+      include: { client: true, plan: true },
+    });
+  }
+
+  async changePlan(id: string, dto: ChangeMembershipPlanDto) {
+    const membership = await this.getMembership(id);
+
+    const newPlan = await this.prisma.membershipPlan.findUnique({ where: { id: dto.planId } });
+    if (!newPlan) throw new NotFoundException('Membership plan not found');
+    if (!newPlan.isActive) throw new BadRequestException('Selected membership plan is not active');
+    if (newPlan.id === membership.planId) {
+      throw new BadRequestException('Membership is already on this plan');
+    }
+
+    // Switching plans starts a fresh billing period on the new plan, rather than
+    // reusing whatever time was left on the old one (prices/durations differ).
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + newPlan.duration);
+
+    return this.prisma.membership.update({
+      where: { id },
+      data: {
+        planId: newPlan.id,
+        startDate,
+        endDate,
         status: MembershipStatus.ACTIVE,
         isActive: true,
       },
