@@ -3,11 +3,17 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { setDefaultResultOrder } from 'dns';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { AuditService } from './audit/audit.service';
+
+// Railway's network can't route IPv6 (ENETUNREACH on Gmail's AAAA record),
+// but Node resolves dual-stack hosts IPv6-first by default — outbound
+// connections (SMTP, MercadoPago, ...) were intermittently hanging/timing out.
+setDefaultResultOrder('ipv4first');
 
 console.log('main.ts loaded');
 
