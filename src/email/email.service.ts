@@ -45,6 +45,15 @@ export class EmailService implements OnModuleInit {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      // Nodemailer's default timeouts are ~2 minutes — if the SMTP port is
+      // blocked/unreachable (e.g. platform-level egress restrictions), every
+      // sendMail() call is awaited inline by the calling service (register,
+      // login-adjacent flows, payment approval, ...), so a slow failure here
+      // means the whole HTTP request hangs for 2 minutes instead of just
+      // failing the email. Fail fast instead.
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000,
     });
 
     await this.transporter.verify();
