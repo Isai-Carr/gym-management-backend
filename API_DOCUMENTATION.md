@@ -308,7 +308,8 @@ Crea al cliente, asigna su membresía y registra el pago en una sola llamada at�
   "startDate": "2026-06-12",
   "activityId": null,
 
-  "amount": 1200,
+  "months": 3,
+  "discount": 100,
   "paymentMethod": "CASH",
   "transactionId": null,
   "notes": "Estudiante UTR"
@@ -324,10 +325,13 @@ Crea al cliente, asigna su membresía y registra el pago en una sola llamada at�
 | `planId` | ✅ | ID del plan elegido en página 2 |
 | `startDate` | ❌ | Fecha inicio (default: hoy) |
 | `activityId` | ❌ | Actividad específica opcional |
-| `amount` | ✅ | Monto pagado |
+| `months` | ❌ | Cantidad de meses a cobrar (default: 1). El precio se calcula como `plan.price × months` |
+| `discount` | ❌ | Ajuste manual (default: 0). Positivo = descuento (se resta), negativo = incremento (se suma) |
 | `paymentMethod` | ✅ | `CASH` \| `TRANSFER` \| `TERMINAL` |
 | `transactionId` | ❌ | ID de operación (para transferencias) |
 | `notes` | ❌ | Notas adicionales |
+
+> **Nota:** `amount` ya no se envía — el monto final lo calcula el servidor (`plan.price × months - discount`) para que el precio base, el ajuste y el precio final nunca queden inconsistentes entre sí.
 
 **Response:**
 ```json
@@ -350,12 +354,16 @@ Crea al cliente, asigna su membresía y registra el pago en una sola llamada at�
       "id": "uuid-membership",
       "status": "ACTIVE",
       "startDate": "2026-06-12T00:00:00.000Z",
-      "endDate": "2026-07-12T00:00:00.000Z",
-      "plan": { "name": "Ilimitado", "price": 1200, "duration": 30 }
+      "endDate": "2026-09-12T00:00:00.000Z",
+      "months": 3,
+      "plan": { "name": "Ilimitado", "price": 700, "duration": 30 }
     },
     "payment": {
       "id": "uuid-payment",
-      "amount": 1200,
+      "amount": 2000,
+      "baseAmount": 2100,
+      "discount": 100,
+      "months": 3,
       "paymentMethod": "CASH",
       "status": "APPROVED",
       "paidAt": "2026-06-12T18:00:00.000Z"
@@ -776,16 +784,31 @@ Suspende una membresía activa.
 
 ### `PATCH /memberships/:id/renew` 👑 Solo ADMIN
 
-Reactiva y renueva una membresía. Extiende la fecha de vencimiento.
+Reactiva y renueva una membresía. Si se envía `paymentMethod`, además registra el cobro de la renovación de forma atómica (mismo caso de uso que el mostrador de recepción: cliente existente que paga por más tiempo, a veces con promoción o cambio de plan).
 
-**Body (opcional):**
+**Body (todo opcional):**
 ```json
 {
-  "days": 30
+  "planId": "uuid-del-plan",
+  "months": 1,
+  "discount": 0,
+  "startDate": "2026-07-15",
+  "paymentMethod": "CASH",
+  "transactionId": null,
+  "notes": "Renovación en recepción"
 }
 ```
 
-> Si no se envía `days`, se usa la duración del plan original.
+| Campo | Descripción |
+|-------|-------------|
+| `planId` | Cambiar de plan al renovar. Default: el plan actual |
+| `months` | Cantidad de meses a renovar. Default: 1. Precio sugerido = `plan.price × months` |
+| `discount` | Ajuste manual. Positivo = descuento (se resta), negativo = incremento (se suma) |
+| `startDate` | Fecha de inicio. Default: hoy o el vencimiento actual, lo que sea más tarde |
+| `paymentMethod` | `CASH` \| `TERMINAL`. Si se omite, la membresía se extiende **sin cobro** (renovación de cortesía) y no se crea ningún `Payment`. `TRANSFER` no se acepta aquí — usar `POST /payments/transfer` para ese método |
+| `transactionId` / `notes` | Opcionales, solo aplican si se envía `paymentMethod` |
+
+> Si no se envía nada en el body, se comporta como antes: renueva 1 mes usando la duración del plan actual, sin cobro.
 
 ---
 
@@ -854,7 +877,9 @@ El cliente sube el comprobante de transferencia. Estado inicial: `PENDING` (requ
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | `membershipId` | string | ID de la membresía |
-| `amount` | number | Monto de la transferencia |
+| `amount` | number | Monto de la transferencia. Requerido si no se envía `months` |
+| `months` | number (opcional) | Cantidad de meses que cubre este pago (renovación). Si se envía, el monto se calcula como `plan.price × months` ajustado por `discount`, **y la membresía se extiende automáticamente al aprobar el pago** (no al subir el comprobante) |
+| `discount` | number (opcional) | Ajuste manual sobre el precio calculado. Solo aplica si se envía `months` |
 | `notes` | string (opcional) | Observaciones |
 | `voucher` | archivo | Imagen o PDF del comprobante (max 5MB) |
 
@@ -862,7 +887,7 @@ El cliente sube el comprobante de transferencia. Estado inicial: `PENDING` (requ
 
 ### `PATCH /payments/approve/:id` 👑 Solo ADMIN
 
-Aprueba un pago en estado `PENDING`. Solo aplica a transferencias. Envía email de confirmación al cliente.
+Aprueba un pago en estado `PENDING`. Solo aplica a transferencias. Envía email de confirmación al cliente. Si el pago tenía `months` (transferencia de renovación), la membresía se extiende en este momento.
 
 **Nota:** El pago debe estar en estado `PENDING`.
 
@@ -881,7 +906,7 @@ Aprueba un pago en estado `PENDING`. Solo aplica a transferencias. Envía email 
 
 ### `PATCH /payments/reject/:id` 👑 Solo ADMIN
 
-Rechaza un pago en estado `PENDING`. Envía email de rechazo al cliente.
+Rechaza un pago en estado `PENDING`. Envía email de rechazo al cliente. Si este era el único pago aprobable de la membresía (p. ej. el pago fundador), la membresía se suspende. Si la membresía ya tenía otro pago `APPROVED` (p. ej. se rechaza una transferencia de *renovación* sobre una membresía ya vigente), la membresía **no** se suspende — el cliente conserva el tiempo que ya había pagado.
 
 **Body (opcional):**
 ```json

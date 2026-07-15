@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail, IsEnum, IsNumber, IsOptional,
-  IsPositive, IsString, IsDateString,
+  IsInt, Min, IsString, IsDateString,
 } from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
 
@@ -43,10 +43,24 @@ export class RegisterClientFullDto {
   startDate?: string;
 
   // ── Página 3: Pago ──────────────────────────────────────────
-  @ApiProperty({ example: 1200, description: 'Monto pagado' })
+  @ApiPropertyOptional({
+    example: 1,
+    default: 1,
+    description: 'Cantidad de meses a cobrar. El precio se calcula como plan.price × months.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  months?: number;
+
+  @ApiPropertyOptional({
+    example: 100,
+    default: 0,
+    description: 'Ajuste manual sobre el precio calculado. Positivo = descuento (se resta), negativo = incremento (se suma).',
+  })
+  @IsOptional()
   @IsNumber()
-  @IsPositive()
-  amount: number;
+  discount?: number;
 
   @ApiProperty({ enum: PaymentMethod, example: PaymentMethod.CASH })
   @IsEnum(PaymentMethod)

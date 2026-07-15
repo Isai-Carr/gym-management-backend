@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { MembershipStatus } from '@prisma/client';
+import { MembershipStatus, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { ChangeMembershipPlanDto } from './dto/change-membership-plan.dto';
+import { RenewMembershipDto } from './dto/renew-membership.dto';
 
 @Injectable()
 export class MembershipsService {
@@ -123,23 +124,70 @@ export class MembershipsService {
     });
   }
 
-  async renewMembership(id: string, additionalDays?: number) {
+  async renewMembership(id: string, dto: RenewMembershipDto) {
     const membership = await this.getMembership(id);
-    const plan = membership.plan;
-    const days = additionalDays ?? plan.duration;
+    const months = dto.months ?? 1;
+
+    const plan = dto.planId
+      ? await this.prisma.membershipPlan.findUnique({ where: { id: dto.planId } })
+      : membership.plan;
+    if (!plan) throw new NotFoundException('Membership plan not found');
+    if (!plan.isActive) throw new BadRequestException('Selected membership plan is not active');
 
     const currentEnd = membership.endDate < new Date() ? new Date() : membership.endDate;
-    const newEndDate = new Date(currentEnd);
-    newEndDate.setDate(newEndDate.getDate() + days);
+    const startDate = dto.startDate ? new Date(dto.startDate) : currentEnd;
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + plan.duration * months);
 
-    return this.prisma.membership.update({
-      where: { id },
-      data: {
-        endDate: newEndDate,
-        status: MembershipStatus.ACTIVE,
-        isActive: true,
-      },
-      include: { client: true, plan: true },
+    const membershipData = {
+      planId: plan.id,
+      startDate,
+      endDate,
+      months,
+      status: MembershipStatus.ACTIVE,
+      isActive: true,
+    };
+
+    if (!dto.paymentMethod) {
+      // Courtesy renewal — extend dates only, no payment recorded.
+      return this.prisma.membership.update({
+        where: { id },
+        data: membershipData,
+        include: { client: true, plan: true },
+      });
+    }
+
+    const baseAmount = Number(plan.price) * months;
+    const discount = dto.discount ?? 0;
+    const amount = baseAmount - discount;
+    if (amount <= 0) {
+      throw new BadRequestException('Calculated amount must be greater than zero');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedMembership = await tx.membership.update({
+        where: { id },
+        data: membershipData,
+        include: { client: true, plan: true },
+      });
+
+      await tx.payment.create({
+        data: {
+          membershipId: id,
+          clientId: membership.clientId,
+          amount,
+          baseAmount,
+          discount,
+          months,
+          paymentMethod: dto.paymentMethod!,
+          transactionId: dto.transactionId ?? null,
+          notes: dto.notes ?? null,
+          status: PaymentStatus.APPROVED,
+          paidAt: new Date(),
+        },
+      });
+
+      return updatedMembership;
     });
   }
 

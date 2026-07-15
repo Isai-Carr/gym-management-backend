@@ -64,9 +64,17 @@ export class ClientsService {
     if (!plan) throw new NotFoundException('Membership plan not found');
     if (!plan.isActive) throw new BadRequestException('Selected membership plan is not active');
 
+    const months = dto.months ?? 1;
     const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
     const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + plan.duration);
+    endDate.setDate(endDate.getDate() + plan.duration * months);
+
+    const baseAmount = Number(plan.price) * months;
+    const discount = dto.discount ?? 0;
+    const amount = baseAmount - discount;
+    if (amount <= 0) {
+      throw new BadRequestException('Calculated amount must be greater than zero');
+    }
 
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
@@ -96,6 +104,7 @@ export class ClientsService {
           activityId: dto.activityId ?? null,
           startDate,
           endDate,
+          months,
           status: 'ACTIVE',
         },
         include: { plan: true },
@@ -105,7 +114,10 @@ export class ClientsService {
         data: {
           membershipId: membership.id,
           clientId: user.client!.id,
-          amount: dto.amount,
+          amount,
+          baseAmount,
+          discount,
+          months,
           paymentMethod: dto.paymentMethod,
           transactionId: dto.transactionId ?? null,
           notes: dto.notes ?? null,

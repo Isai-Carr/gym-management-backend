@@ -69,6 +69,7 @@ model Membership {
   activityId String?
   startDate  DateTime
   endDate    DateTime
+  months     Int              @default(1)
   isActive   Boolean          @default(true)
   status     MembershipStatus @default(ACTIVE)
   createdAt  DateTime         @default(now())
@@ -90,6 +91,9 @@ model Payment {
   membershipId  String
   clientId      String?
   amount        Decimal       @db.Decimal(10, 2)
+  baseAmount    Decimal?      @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  months        Int?
   status        PaymentStatus @default(PENDING)
   paymentMethod PaymentMethod
   transactionId String?

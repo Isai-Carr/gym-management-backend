@@ -74,11 +74,32 @@ export class PaymentsService {
     });
     if (!membership) throw new NotFoundException('Membership not found');
 
+    let amount = dto.amount;
+    let baseAmount: number | undefined;
+    const months = dto.months;
+
+    if (months) {
+      baseAmount = Number(membership.plan.price) * months;
+      amount = baseAmount - (dto.discount ?? 0);
+      if (amount <= 0) {
+        throw new BadRequestException('Calculated amount must be greater than zero');
+      }
+    }
+
+    if (amount === undefined) {
+      throw new BadRequestException('Either amount or months must be provided');
+    }
+
+    // Membership dates are NOT extended here — a pending transfer must not grant
+    // access yet. The extension happens in approvePayment once it's confirmed.
     return this.prisma.payment.create({
       data: {
         membershipId: dto.membershipId,
         clientId: membership.clientId,
-        amount: dto.amount,
+        amount,
+        baseAmount,
+        discount: months ? (dto.discount ?? 0) : undefined,
+        months,
         paymentMethod: PaymentMethod.TRANSFER,
         voucherUrl: voucherPath ?? null,
         notes: dto.notes,
@@ -99,15 +120,47 @@ export class PaymentsService {
   }
 
   async approvePayment(id: string, adminId: string) {
+    const current = await this.prisma.payment.findUnique({
+      where: { id },
+      select: { id: true, membershipId: true, months: true },
+    });
+    if (!current) throw new NotFoundException('Payment not found');
+
     // Atomic: only updates if STILL PENDING — eliminates the check-then-act race condition
-    const result = await this.prisma.payment.updateMany({
-      where: { id, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.APPROVED, approvedBy: adminId, paidAt: new Date() },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.payment.updateMany({
+        where: { id, status: PaymentStatus.PENDING },
+        data: { status: PaymentStatus.APPROVED, approvedBy: adminId, paidAt: new Date() },
+      });
+
+      if (updateResult.count === 0) return updateResult;
+
+      // A pending transfer with `months` set is a renewal payment — the membership
+      // wasn't extended when it was created, only now that it's actually confirmed.
+      if (current.months) {
+        const membership = await tx.membership.findUniqueOrThrow({
+          where: { id: current.membershipId },
+          include: { plan: true },
+        });
+        const currentEnd = membership.endDate < new Date() ? new Date() : membership.endDate;
+        const newEndDate = new Date(currentEnd);
+        newEndDate.setDate(newEndDate.getDate() + membership.plan.duration * current.months);
+
+        await tx.membership.update({
+          where: { id: current.membershipId },
+          data: {
+            endDate: newEndDate,
+            months: current.months,
+            status: MembershipStatus.ACTIVE,
+            isActive: true,
+          },
+        });
+      }
+
+      return updateResult;
     });
 
     if (result.count === 0) {
-      const exists = await this.prisma.payment.findUnique({ where: { id }, select: { id: true } });
-      if (!exists) throw new NotFoundException('Payment not found');
       throw new BadRequestException('Only PENDING payments can be approved');
     }
 
@@ -145,10 +198,19 @@ export class PaymentsService {
 
       // Rejecting the payment that a membership was riding on must revoke that access —
       // createMembership/createTransferPayment activate the membership before payment is confirmed.
-      await tx.membership.updateMany({
-        where: { id: current.membershipId, status: MembershipStatus.ACTIVE },
-        data: { status: MembershipStatus.SUSPENDED, isActive: false },
+      // But if another APPROVED payment already backs this membership, this rejected
+      // payment was just a renewal attempt on top of an already-valid membership —
+      // don't punish the client by suspending time they already legitimately paid for.
+      const otherApprovedCount = await tx.payment.count({
+        where: { membershipId: current.membershipId, status: PaymentStatus.APPROVED, id: { not: id } },
       });
+
+      if (otherApprovedCount === 0) {
+        await tx.membership.updateMany({
+          where: { id: current.membershipId, status: MembershipStatus.ACTIVE },
+          data: { status: MembershipStatus.SUSPENDED, isActive: false },
+        });
+      }
 
       return updateResult;
     });

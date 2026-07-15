@@ -10,6 +10,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { ChangeMembershipPlanDto } from './dto/change-membership-plan.dto';
+import { RenewMembershipDto } from './dto/renew-membership.dto';
 
 @ApiTags('Memberships')
 @ApiBearerAuth()
@@ -105,9 +106,9 @@ export class MembershipsController {
 
   @Patch(':id/renew')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Renew membership (Admin)' })
-  renew(@Param('id') id: string, @Body('days') days?: number) {
-    return this.membershipsService.renewMembership(id, days);
+  @ApiOperation({ summary: 'Renew membership, optionally charging a payment for it (Admin)' })
+  renew(@Param('id') id: string, @Body() dto: RenewMembershipDto) {
+    return this.membershipsService.renewMembership(id, dto);
   }
 
   @Patch(':id/change-plan')

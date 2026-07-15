@@ -45,8 +45,9 @@ async function main() {
 
   // ── Membership plans ─────────────────────────────────────────────────────
   const plans = [
-    { name: 'Ilimitado', description: 'Acceso ilimitado a todas las actividades', price: 1200, duration: 30 },
-    { name: 'Kids', description: 'Membresía para niños — CrossFit Kids', price: 800, duration: 30 },
+    { name: 'Ilimitado', description: 'Acceso ilimitado a todas las actividades', price: 700, duration: 30 },
+    { name: 'Estudiantes', description: 'Membresía con descuento para estudiantes', price: 500, duration: 30 },
+    { name: 'Kids', description: 'Membresía para niños — CrossFit Kids', price: 500, duration: 30 },
     { name: 'Bonos', description: 'Paquete de 10 clases sin vencimiento mensual', price: 600, duration: 90 },
   ];
 
