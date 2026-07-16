@@ -296,6 +296,23 @@ export class PaymentsService {
     });
   }
 
+  private async extendMembershipByMonths(membershipId: string, months: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const membership = await tx.membership.findUniqueOrThrow({
+        where: { id: membershipId },
+        include: { plan: true },
+      });
+      const currentEnd = membership.endDate < new Date() ? new Date() : membership.endDate;
+      const newEndDate = new Date(currentEnd);
+      newEndDate.setDate(newEndDate.getDate() + membership.plan.duration * months);
+
+      return tx.membership.update({
+        where: { id: membershipId },
+        data: { endDate: newEndDate, months, status: MembershipStatus.ACTIVE, isActive: true },
+      });
+    });
+  }
+
   async createCardPayment(dto: CreateCardPaymentDto) {
     const membership = await this.prisma.membership.findUnique({
       where: { id: dto.membershipId },
@@ -325,6 +342,7 @@ export class PaymentsService {
         membershipId: dto.membershipId,
         clientId: membership.clientId,
         amount: dto.amount,
+        months: dto.months,
         paymentMethod: PaymentMethod.CARD,
         status,
         transactionId: String(mpResult.id),
@@ -337,6 +355,9 @@ export class PaymentsService {
     });
 
     if (status === PaymentStatus.APPROVED) {
+      if (dto.months) {
+        await this.extendMembershipByMonths(dto.membershipId, dto.months);
+      }
       await this.emailService.sendPaymentReceived(
         membership.client.user.email,
         `${membership.client.firstName} ${membership.client.lastName}`,
@@ -378,6 +399,9 @@ export class PaymentsService {
       });
 
       if (newStatus === PaymentStatus.APPROVED) {
+        if (payment.months) {
+          await this.extendMembershipByMonths(payment.membershipId, payment.months);
+        }
         const client = payment.membership.client;
         await this.emailService.sendPaymentApproved(
           client.user.email,

@@ -33,4 +33,13 @@ export class CreateCardPaymentDto {
   @ApiProperty({ description: 'Email del titular de la tarjeta' })
   @IsEmail()
   payerEmail!: string;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Cantidad de meses que cubre este pago (renovación). Si se envía y el pago es aprobado, la membresía se extiende automáticamente — igual que en una transferencia aprobada.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  months?: number;
 }
