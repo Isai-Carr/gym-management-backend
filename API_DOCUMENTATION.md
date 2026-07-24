@@ -1685,7 +1685,7 @@ Los archivos subidos son accesibles directamente desde el servidor:
 ```
 Página 1: Recopilar firstName, lastName, email, phone
 Página 2: GET /memberships/plans → mostrar planes → usuario selecciona uno (guardar planId)
-Página 3: Definir amount, paymentMethod, transactionId (si aplica)
+Página 3: Definir months (opcional, default 1), discount (opcional), paymentMethod, transactionId (si aplica)
 Página 4: POST /clients/register con todo el body → mostrar confirmación
 ```
 
