@@ -141,8 +141,8 @@ export class PaymentsController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update payment status (Admin)' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto) {
-    return this.paymentsService.updatePaymentStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto, @Request() req: any) {
+    return this.paymentsService.updatePaymentStatus(id, dto, req.user.id);
   }
 
   // ── MercadoPago ───────────────────────────────────────────────────────────

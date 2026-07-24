@@ -64,11 +64,13 @@ export class EmailService implements OnModuleInit {
     return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noreply@oasisgym.com';
   }
 
-  async sendMail(to: string, subject: string, html: string) {
+  async sendMail(to: string, subject: string, html: string): Promise<boolean> {
     try {
       await this.transporter.sendMail({ from: this.from, to, subject, html });
+      return true;
     } catch (err: any) {
       this.logger.error(`Failed to send email to ${to} — subject: "${subject}" — ${err.message}`);
+      return false;
     }
   }
 

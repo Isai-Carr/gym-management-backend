@@ -252,16 +252,25 @@ export class PaymentsService {
     return payment;
   }
 
-  async updatePaymentStatus(id: string, dto: UpdatePaymentStatusDto) {
-    await this.getPayment(id);
+  async updatePaymentStatus(id: string, dto: UpdatePaymentStatusDto, adminId: string) {
+    // APPROVED/REJECTED must go through approvePayment/rejectPayment — those are the
+    // only paths that atomically guard against re-transitioning a non-PENDING payment
+    // and that extend the membership when the payment carries `months`. A direct
+    // update here would silently charge the client without ever adding their time.
+    if (dto.status === PaymentStatus.APPROVED) {
+      return this.approvePayment(id, adminId);
+    }
+    if (dto.status === PaymentStatus.REJECTED) {
+      return this.rejectPayment(id, adminId, dto.notes);
+    }
 
+    await this.getPayment(id);
     return this.prisma.payment.update({
       where: { id },
       data: {
         status: dto.status,
         transactionId: dto.transactionId,
         notes: dto.notes,
-        paidAt: dto.status === PaymentStatus.APPROVED ? new Date() : undefined,
       },
     });
   }

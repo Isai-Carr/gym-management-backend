@@ -28,6 +28,16 @@ export class AttendanceService {
       throw new BadRequestException('Client does not have an active membership');
     }
 
+    const COOLDOWN_MS = 2 * 60 * 60 * 1000;
+    const lastCheckIn = await this.prisma.attendance.findFirst({
+      where: { clientId: dto.clientId },
+      orderBy: { checkIn: 'desc' },
+      select: { checkIn: true },
+    });
+    if (lastCheckIn && Date.now() - lastCheckIn.checkIn.getTime() < COOLDOWN_MS) {
+      throw new BadRequestException('You already have a recent check-in');
+    }
+
     return this.prisma.attendance.create({
       data: {
         clientId: dto.clientId,

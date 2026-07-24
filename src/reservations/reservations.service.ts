@@ -34,6 +34,16 @@ export class ReservationsService {
         throw new BadRequestException('Client does not have an active membership');
       }
 
+      // Lock the class row first so concurrent reservation attempts for the same
+      // class serialize here — without this, two requests can both read
+      // count < capacity before either commits, causing overbooking.
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Class" WHERE id = ${dto.classId} FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new NotFoundException('Class not found');
+      }
+
       const gymClass = await tx.class.findUnique({
         where: { id: dto.classId },
         include: { reservations: { select: { id: true } } },
@@ -47,10 +57,17 @@ export class ReservationsService {
         throw new BadRequestException('Class is full');
       }
 
-      return tx.reservation.create({
-        data: dto,
-        include: { client: true, class: true },
-      });
+      try {
+        return await tx.reservation.create({
+          data: dto,
+          include: { client: true, class: true },
+        });
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          throw new BadRequestException('You already have a reservation for this class');
+        }
+        throw err;
+      }
     });
   }
 
@@ -84,8 +101,14 @@ export class ReservationsService {
   }
 
   async cancelReservation(id: string) {
-    const reservation = await this.prisma.reservation.findUnique({ where: { id } });
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id },
+      include: { class: { select: { startTime: true } } },
+    });
     if (!reservation) throw new NotFoundException('Reservation not found');
+    if (reservation.class.startTime <= new Date()) {
+      throw new BadRequestException('Cannot cancel a reservation for a class that already started');
+    }
     return this.prisma.reservation.delete({ where: { id } });
   }
 }

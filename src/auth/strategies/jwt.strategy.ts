@@ -30,6 +30,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    // Access and refresh tokens share the same signing secret and payload shape
+    // apart from `type` — without this check, a leaked refresh token (7-day TTL)
+    // would work as a Bearer access token on every protected endpoint.
+    if (payload.type !== 'access') {
+      throw new UnauthorizedException('Invalid access token');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: {
         id: payload.sub,

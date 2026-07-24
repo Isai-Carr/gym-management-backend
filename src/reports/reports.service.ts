@@ -6,6 +6,14 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // "2026-07-24" parses as UTC midnight, so using it directly as an `lte` bound
+  // excludes almost all of that day. Mirrors the local y/m/d pattern already used
+  // in classes.service.ts's getSchedule() for the same kind of date-only filter.
+  private endOfDay(dateStr: string): Date {
+    const d = new Date(dateStr);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+
   async getDashboardMetrics() {
     const now = new Date();
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -94,28 +102,35 @@ export class ReportsService {
 
   async getMonthlyIncomeChart(months = 12) {
     const now = new Date();
-    const result: { year: number; month: number; label: string; total: number }[] = [];
+    const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-    for (let i = months - 1; i >= 0; i--) {
+    const ranges = Array.from({ length: months }, (_, idx) => {
+      const i = months - 1 - idx;
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
-
-      const agg = await this.prisma.payment.aggregate({
-        _sum: { amount: true },
-        where: { status: PaymentStatus.APPROVED, paidAt: { gte: start, lte: end } },
-      });
-
-      const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-      result.push({
+      return {
         year: d.getFullYear(),
         month: d.getMonth() + 1,
         label: labels[d.getMonth()],
-        total: agg._sum.amount?.toNumber() ?? 0,
-      });
-    }
+        start: new Date(d.getFullYear(), d.getMonth(), 1),
+        end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59),
+      };
+    });
 
-    return result;
+    const aggregates = await Promise.all(
+      ranges.map((r) =>
+        this.prisma.payment.aggregate({
+          _sum: { amount: true },
+          where: { status: PaymentStatus.APPROVED, paidAt: { gte: r.start, lte: r.end } },
+        }),
+      ),
+    );
+
+    return ranges.map((r, idx) => ({
+      year: r.year,
+      month: r.month,
+      label: r.label,
+      total: aggregates[idx]._sum.amount?.toNumber() ?? 0,
+    }));
   }
 
   async getRecentActivity(limit = 20) {
@@ -202,7 +217,7 @@ export class ReportsService {
   async getRevenueByPeriod(startDate: string, endDate: string) {
     const where = {
       status: PaymentStatus.APPROVED,
-      paidAt: { gte: new Date(startDate), lte: new Date(endDate) },
+      paidAt: { gte: new Date(startDate), lte: this.endOfDay(endDate) },
     };
 
     const [payments, aggregated] = await this.prisma.$transaction([
@@ -238,7 +253,7 @@ export class ReportsService {
     if (startDate || endDate) {
       where.checkIn = {};
       if (startDate) where.checkIn.gte = new Date(startDate);
-      if (endDate) where.checkIn.lte = new Date(endDate);
+      if (endDate) where.checkIn.lte = this.endOfDay(endDate);
     }
 
     return this.prisma.attendance.findMany({
@@ -333,7 +348,7 @@ export class ReportsService {
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = new Date(startDate);
-      if (endDate) where.createdAt.lte = new Date(endDate);
+      if (endDate) where.createdAt.lte = this.endOfDay(endDate);
     }
 
     return this.prisma.payment.findMany({

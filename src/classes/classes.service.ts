@@ -58,6 +58,15 @@ export class ClassesService {
   async update(id: string, dto: UpdateClassDto) {
     await this.findOne(id);
 
+    if (dto.capacity !== undefined) {
+      const reservationCount = await this.prisma.reservation.count({ where: { classId: id } });
+      if (dto.capacity < reservationCount) {
+        throw new BadRequestException(
+          `Cannot set capacity below current reservation count (${reservationCount}).`,
+        );
+      }
+    }
+
     const data: Record<string, unknown> = { ...dto };
 
     if (dto.startTime) data.startTime = new Date(dto.startTime);

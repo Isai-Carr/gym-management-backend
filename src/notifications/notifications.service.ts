@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  ForbiddenException, Injectable, NotFoundException, Logger,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,9 +36,12 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(id: string) {
+  async markAsRead(id: string, userId: string, isAdmin: boolean) {
     const notification = await this.prisma.notification.findUnique({ where: { id } });
     if (!notification) throw new NotFoundException('Notification not found');
+    if (!isAdmin && notification.userId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
     return this.prisma.notification.update({ where: { id }, data: { isRead: true } });
   }
 

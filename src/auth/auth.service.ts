@@ -17,6 +17,11 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+// Precomputed once at startup so `login()` can run a bcrypt.compare of similar cost
+// even when the user doesn't exist — otherwise the missing-bcrypt-call path is fast
+// enough to let an attacker enumerate valid emails by response timing alone.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('dummy-password-for-timing-safety', 10);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -49,10 +54,17 @@ export class AuthService {
 
     const name = `${dto.firstName} ${dto.lastName}`.trim();
     const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
-    await this.emailService.sendWelcome(dto.email, name, temporaryPassword, loginUrl);
+    const emailSent = await this.emailService.sendWelcome(dto.email, name, temporaryPassword, loginUrl);
 
     const { password: _p, ...safeUser } = user;
-    return { message: 'Admin registered successfully', user: safeUser };
+    return {
+      message: emailSent
+        ? 'Admin registered successfully'
+        : 'Admin registered successfully — WARNING: welcome email failed to send, share credentials manually',
+      emailSent,
+      ...(emailSent ? {} : { temporaryPassword }),
+      user: safeUser,
+    };
   }
 
   async register(dto: RegisterDto) {
@@ -79,11 +91,13 @@ export class AuthService {
 
     const name = [dto.firstName, dto.lastName].filter(Boolean).join(' ') || dto.email;
     const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
-    await this.emailService.sendWelcome(dto.email, name, '', loginUrl);
+    const emailSent = await this.emailService.sendWelcome(dto.email, name, '', loginUrl);
 
     const token = this.generateToken(user.id, user.email, user.role);
     const { password: _p, ...safeUser } = user;
-    return { message: 'User registered successfully', token, user: safeUser };
+    return {
+      message: 'User registered successfully', emailSent, token, user: safeUser,
+    };
   }
 
   async login(dto: LoginDto) {
@@ -92,7 +106,10 @@ export class AuthService {
       include: { client: true },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      await bcrypt.compare(dto.password, DUMMY_PASSWORD_HASH);
+      throw new UnauthorizedException('Invalid credentials');
+    }
     if (!user.isActive) throw new UnauthorizedException('Account is disabled');
 
     const passwordMatch = await bcrypt.compare(dto.password, user.password);
@@ -164,6 +181,9 @@ export class AuthService {
       data: { password: hashedPassword, mustChangePassword: false },
     });
     await this.prisma.passwordResetToken.deleteMany({ where: { token: hashedToken } });
+    // A password reset should log out every existing session — otherwise a stolen
+    // refresh token stays valid for up to 7 days after the "fix".
+    await this.prisma.refreshToken.deleteMany({ where: { user: { email: resetToken.email } } });
 
     return { message: 'Password reset successful' };
   }
@@ -171,6 +191,9 @@ export class AuthService {
   async refreshToken(dto: RefreshTokenDto) {
     try {
       const payload = await this.jwtService.verifyAsync(dto.refreshToken);
+      if (payload.type !== 'refresh') {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
       const stored = await this.prisma.refreshToken.findUnique({
         where: { token: this.hashToken(dto.refreshToken) },
       });
@@ -209,6 +232,8 @@ export class AuthService {
       where: { id: userId },
       data: { password: hashedPassword, mustChangePassword: false },
     });
+    // Same reasoning as resetPassword: don't leave old sessions valid after a change.
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
 
     const name = user.client
       ? `${user.client.firstName} ${user.client.lastName}`.trim()
@@ -239,10 +264,10 @@ export class AuthService {
   }
 
   private generateToken(userId: string, email: string, role: Role): string {
-    return this.jwtService.sign({ sub: userId, email, role }, { expiresIn: '1d' });
+    return this.jwtService.sign({ sub: userId, email, role, type: 'access' }, { expiresIn: '1d' });
   }
 
   private generateRefreshToken(userId: string, email: string, role: Role): string {
-    return this.jwtService.sign({ sub: userId, email, role }, { expiresIn: '7d' });
+    return this.jwtService.sign({ sub: userId, email, role, type: 'refresh' }, { expiresIn: '7d' });
   }
 }

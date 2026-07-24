@@ -45,7 +45,7 @@ export class ClientsService {
     });
 
     const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
-    await this.emailService.sendWelcome(
+    const emailSent = await this.emailService.sendWelcome(
       dto.email,
       `${dto.firstName} ${dto.lastName}`,
       temporaryPassword,
@@ -53,7 +53,14 @@ export class ClientsService {
     );
 
     const { password: _pwd, ...safeUser } = user;
-    return { message: 'Client created successfully', user: safeUser };
+    return {
+      message: emailSent
+        ? 'Client created successfully'
+        : 'Client created successfully — WARNING: welcome email failed to send, share credentials manually',
+      emailSent,
+      ...(emailSent ? {} : { temporaryPassword }),
+      user: safeUser,
+    };
   }
 
   async registerFull(dto: RegisterClientFullDto) {
@@ -130,7 +137,7 @@ export class ClientsService {
     });
 
     const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/login`;
-    await this.emailService.sendWelcome(
+    const emailSent = await this.emailService.sendWelcome(
       dto.email,
       `${dto.firstName} ${dto.lastName}`,
       temporaryPassword,
@@ -139,7 +146,11 @@ export class ClientsService {
 
     const { password: _pwd, ...safeUser } = user;
     return {
-      message: 'Client registered successfully',
+      message: emailSent
+        ? 'Client registered successfully'
+        : 'Client registered successfully — WARNING: welcome email failed to send, share credentials manually',
+      emailSent,
+      ...(emailSent ? {} : { temporaryPassword }),
       user: safeUser,
       membership,
       payment,
@@ -153,14 +164,17 @@ export class ClientsService {
     const sortBy = this.ALLOWED_SORT_FIELDS.has(query.sortBy ?? '') ? query.sortBy! : 'createdAt';
     const skip = (page - 1) * limit;
 
-    const where = search
-      ? {
-          OR: [
-            { firstName: { contains: search, mode: 'insensitive' as const } },
-            { lastName: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    const where = {
+      user: { isActive: true },
+      ...(search
+        ? {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' as const } },
+              { lastName: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.client.findMany({
